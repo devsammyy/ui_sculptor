@@ -1,101 +1,78 @@
-import { ModelStrategyFactory } from "@/core/domain/strategies/model-strategy";
-import { CodeSynthesisService } from "@/core/services/CodeSynthesisService";
-import { ValidationPipeline } from "@/core/services/ValidationPipeline";
-import {
-  DiskFileSystemAdapter,
-  ConsoleTelemetryAdapter,
-} from "@/infrastructure/adapters/file-system-adapters";
-import { SynthesisContext } from "@/core/domain/models/viewport-target";
+import { DiskFileSystemAdapter } from "@/infrastructure/adapters/file-system-adapters";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AutonomousAstSculptStrategy,
+  HostedMetaStrategy,
+} from "@/core/domain/strategies/model-strategy";
+import { SynthesisContext } from "@/core/domain/models/viewport-target";
 
 /**
  * POST /api/sculpt
- * Orchestrator entry point
- * Accepts intent + target, runs perception -> synthesis -> validation -> apply
+ * Core mutation endpoint — routes to hosted Muse Wonder 1.0 (Meta API)
+ * Falls back to AutonomousAstSculptStrategy when API key is absent
  */
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+
   try {
     const body = await request.json();
-    const { intent, target, filePath, context } = body;
+    const { intent, target, filePath, context } = body as {
+      intent: string;
+      target: { x: number; y: number };
+      filePath: string;
+      context?: { designTokens?: Record<string, unknown> };
+    };
 
-    if (!intent || !target) {
+    if (!intent || typeof intent !== "string") {
       return NextResponse.json(
-        { success: false, error: "Intent and target are required" },
+        { success: false, error: "Missing or invalid 'intent' field" },
         { status: 400 },
       );
     }
 
-    // Initialize services
-    const fileSystem = new DiskFileSystemAdapter(process.cwd());
-    const telemetry = new ConsoleTelemetryAdapter();
-    const validationPipeline = new ValidationPipeline();
-    const modelStrategy = ModelStrategyFactory.createSynthesisStrategy();
-    const codeSynthesis = new CodeSynthesisService(
-      fileSystem,
-      telemetry,
-      modelStrategy,
-      validationPipeline,
-    );
-
-    // Read the target file
-    const targetFilePath = filePath || "src/components/sculpted/Component.tsx";
-    let oldCode = "";
-    if (filePath) {
-      try {
-        oldCode = await fileSystem.readFile(filePath);
-      } catch {
-        // File might not exist yet (create new)
-        oldCode = "";
-      }
+    if (!filePath || typeof filePath !== "string") {
+      return NextResponse.json(
+        { success: false, error: "Missing or invalid 'filePath' field" },
+        { status: 400 },
+      );
     }
 
-    const normalizedTarget = {
-      x: typeof target?.x === "number" ? target.x : 0.5,
-      y: typeof target?.y === "number" ? target.y : 0.5,
-      viewportWidth: target?.viewportWidth || 1280,
-      viewportHeight: target?.viewportHeight || 800,
-      timestamp: target?.timestamp || Date.now(),
-      source: (target?.source as "click" | "voice" | "gesture") || "click",
-    };
-
-    const mask = {
-      base64Png: context?.mask?.base64Png || "",
-      boundingBox: context?.mask?.boundingBox || {
-        x: normalizedTarget.x,
-        y: normalizedTarget.y,
-        width: 0.1,
-        height: 0.1,
-      },
-      confidence: context?.mask?.confidence || 0.95,
-      targetElement:
-        context?.mask?.targetElement ||
-        (typeof target === "string" ? target : "Component"),
-    };
-
-    const astContext = {
-      filePath: targetFilePath,
-      nodeType: "JSXElement",
-      startLine: 1,
-      endLine: oldCode ? oldCode.split("\n").length : 1,
-      sourceCode:
-        oldCode ||
-        `import React from 'react';\n\nexport const Component: React.FC = () => {\n  return <div>Scaffold</div>;\n};\nexport default Component;\n`,
-      parentComponent: mask.targetElement,
-    };
-
-    const projectFiles = new Map<string, string>();
-    if (oldCode) {
-      projectFiles.set(targetFilePath, oldCode);
+    // Read the source file from disk
+    const fileSystem = new DiskFileSystemAdapter(process.cwd());
+    let sourceCode = "";
+    try {
+      sourceCode = await fileSystem.readFile(filePath);
+    } catch {
+      // File may not exist yet — start with empty scaffold
+      sourceCode = "";
     }
 
     // Build synthesis context
     const synthesisContext: SynthesisContext = {
-      target: normalizedTarget,
-      mask,
-      astContext,
       userIntent: intent,
-      projectFiles,
-      designTokens: context?.designTokens || {
+      target: {
+        x: target?.x ?? 0.5,
+        y: target?.y ?? 0.5,
+        viewportWidth: 1280,
+        viewportHeight: 800,
+        timestamp: Date.now(),
+        source: "click",
+      },
+      astContext: {
+        filePath,
+        sourceCode,
+        nodeType: "JSXElement",
+        startLine: 1,
+        endLine: sourceCode.split("\n").length,
+        parentComponent: filePath.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "Component",
+      },
+      mask: {
+        base64Png: "",
+        boundingBox: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+        confidence: 0.95,
+        targetElement: "ui-component",
+      },
+      designTokens: {
         colors: {
           primary: "#0066CC",
           secondary: "#6B7280",
@@ -104,55 +81,74 @@ export async function POST(request: NextRequest) {
           text: "#111827",
           border: "#E5E7EB",
         },
-        spacing: { xs: "4px", sm: "8px", md: "16px", lg: "24px", xl: "32px" },
+        spacing: { xs: "0.25rem", sm: "0.5rem", md: "1rem", lg: "1.5rem", xl: "2rem" },
+        borderRadius: { sm: "0.25rem", md: "0.5rem", lg: "1rem", full: "9999px" },
         typography: {
           fontFamily: "Inter, system-ui, sans-serif",
-          fontSizeBase: "16px",
-          fontSizeLg: "18px",
-          fontSizeXl: "20px",
+          fontSizeBase: "1rem",
+          fontSizeLg: "1.125rem",
+          fontSizeXl: "1.5rem",
         },
-        borderRadius: { sm: "4px", md: "8px", lg: "12px", full: "9999px" },
+        ...((context?.designTokens as Partial<SynthesisContext["designTokens"]>) ?? {}),
       },
+      projectFiles: new Map([[filePath, sourceCode]]),
     };
 
-    // Run code synthesis and patch application pipeline
-    const synthesisResult = await codeSynthesis.synthesizeAndApply(synthesisContext);
+    // Pick strategy: hosted Muse Wonder (hackathon requirement) → AST fallback
+    const metaApiKey = process.env["META_API_KEY"];
+    const museWonderUrl =
+      process.env["MUSE_WONDER_API_URL"] || "https://api.meta.ai/v1";
 
-    if (!synthesisResult.success) {
+    let strategy: HostedMetaStrategy | AutonomousAstSculptStrategy;
+    if (metaApiKey) {
+      strategy = new HostedMetaStrategy(metaApiKey, museWonderUrl);
+    } else {
+      console.warn(
+        "[sculpt] META_API_KEY not set — falling back to AutonomousAstSculptStrategy",
+      );
+      strategy = new AutonomousAstSculptStrategy();
+    }
+
+    const result = await strategy.synthesizePatch(synthesisContext);
+
+    if (!result.success || !result.patchedCode) {
       return NextResponse.json(
         {
           success: false,
-          error: "Code synthesis failed",
-          diagnostics: synthesisResult.diagnostics,
+          error:
+            result.diagnostics[0]?.message || "Synthesis failed — no patched code returned",
         },
-        { status: 422 },
+        { status: 500 },
       );
     }
 
-    let newCode = "";
+    // Persist the patched file to disk
     try {
-      newCode = await fileSystem.readFile(targetFilePath);
-    } catch {
-      newCode = "";
+      await fileSystem.writeFile(filePath, result.patchedCode);
+    } catch (writeErr) {
+      console.error("[sculpt] Failed to write patched file:", writeErr);
     }
 
-    // Return result with diff info
     return NextResponse.json({
       success: true,
       data: {
-        filePath: targetFilePath,
-        oldCode,
-        newCode,
-        diagnostics: synthesisResult.diagnostics,
-        metadata: synthesisResult.metadata,
+        oldCode: sourceCode,
+        newCode: result.patchedCode,
+        filePath,
+        metadata: {
+          strategyUsed: result.metadata.strategyUsed,
+          durationMs: result.metadata.durationMs,
+          tokensUsed: result.metadata.tokensUsed,
+          totalDurationMs: Date.now() - startTime,
+        },
       },
     });
   } catch (error) {
-    console.error("Sculpt error:", error);
+    console.error("[sculpt] Unhandled error:", error);
     return NextResponse.json(
       {
         success: false,
-        error: "Sculpt operation failed",
+        error: "Sculpt execution failed",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },

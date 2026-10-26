@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { MutateComponentCommand } from "../../core/domain/commands/sculpt-command";
 import {
   selectActiveCoordinate,
   selectActiveFile,
@@ -58,6 +59,58 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
 export default DashboardHero;
 `;
 
+const STORAGE_KEY = "ui-sculptor:canvas-state";
+
+interface PersistedCanvasState {
+  code: string;
+  hasExtraButton: boolean;
+  hasExpandedGrid: boolean;
+  isDarkMode: boolean;
+  isHighContrast: boolean;
+  isAnimated: boolean;
+  cardTitle: string;
+  monthlyRevenue: number;
+}
+
+function loadCanvasState(): PersistedCanvasState {
+  if (typeof window === "undefined") {
+    return {
+      code: DEFAULT_CODE,
+      hasExtraButton: false,
+      hasExpandedGrid: false,
+      isDarkMode: true,
+      isHighContrast: false,
+      isAnimated: false,
+      cardTitle: "Acquisition & Revenue Analytics",
+      monthlyRevenue: 148250,
+    };
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as PersistedCanvasState;
+  } catch {
+    // corrupted — fall through to defaults
+  }
+  return {
+    code: DEFAULT_CODE,
+    hasExtraButton: false,
+    hasExpandedGrid: false,
+    isDarkMode: true,
+    isHighContrast: false,
+    isAnimated: false,
+    cardTitle: "Acquisition & Revenue Analytics",
+    monthlyRevenue: 148250,
+  };
+}
+
+function saveCanvasState(state: PersistedCanvasState): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // quota exceeded — silently ignore
+  }
+}
+
 /**
  * StudioPage - Main Page component
  * High-craft visual engineering studio with live interactive canvas
@@ -79,24 +132,89 @@ export const StudioPage: React.FC<StudioPageProps> = ({
   const canUndo = useSculptStore(selectCanUndo);
   const canRedo = useSculptStore(selectCanRedo);
 
-  // Live Component State
+  // Rehydrate canvas state from localStorage on first render
+  const [_persisted] = useState<PersistedCanvasState>(loadCanvasState);
+
+  // Live Component State — seeded from persisted values
   const [period, setPeriod] = useState<"monthly" | "annual">("monthly");
   const [activeFilter, setActiveFilter] = useState("overview");
-  const [hasExtraButton, setHasExtraButton] = useState(false);
-  const [hasExpandedGrid, setHasExpandedGrid] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [isHighContrast, setIsHighContrast] = useState(false);
-  const [isAnimated, setIsAnimated] = useState(false);
+  const [cardTitle, setCardTitle] = useState(_persisted.cardTitle);
+  const [monthlyRevenue, setMonthlyRevenue] = useState(_persisted.monthlyRevenue);
+  const [activeCohorts, setActiveCohorts] = useState(48290);
+  const [conversionRate, setConversionRate] = useState(5.84);
+  const [hasExtraButton, setHasExtraButton] = useState(_persisted.hasExtraButton);
+  const [hasExpandedGrid, setHasExpandedGrid] = useState(_persisted.hasExpandedGrid);
+  const [isDarkMode, setIsDarkMode] = useState(_persisted.isDarkMode);
+  const [isHighContrast, setIsHighContrast] = useState(_persisted.isHighContrast);
+  const [isAnimated, setIsAnimated] = useState(_persisted.isAnimated);
   const [selectedElement, setSelectedElement] = useState<string>("HeroCard");
+
+  // Persist canvas state to localStorage whenever it changes
+  useEffect(() => {
+    const currentCode = newCode || oldCode;
+    saveCanvasState({
+      code: currentCode,
+      hasExtraButton,
+      hasExpandedGrid,
+      isDarkMode,
+      isHighContrast,
+      isAnimated,
+      cardTitle,
+      monthlyRevenue,
+    });
+  }, [hasExtraButton, hasExpandedGrid, isDarkMode, isHighContrast, isAnimated, cardTitle, monthlyRevenue, newCode, oldCode]);
+
+  const applyCodeToComponentState = useCallback((code: string) => {
+    setHasExtraButton(
+      code.includes("secondary-btn") || code.includes("Audit Log"),
+    );
+
+    if (code.includes("isDarkMode = false") || code.includes('className="dashboard-hero light')) {
+      setIsDarkMode(false);
+    } else if (code.includes("isDarkMode = true") || code.includes('className="dashboard-hero dark')) {
+      setIsDarkMode(true);
+    }
+
+    setHasExpandedGrid(
+      code.includes("Customer LTV") || code.includes("hasExpandedGrid = true"),
+    );
+    setIsAnimated(
+      code.includes("animated") || code.includes("isAnimated = true"),
+    );
+    setIsHighContrast(
+      code.includes("high-contrast") ||
+        code.includes("isHighContrast = true") ||
+        code.includes("2px solid #ffffff"),
+    );
+
+    const titleMatch = code.match(/title\s*=\s*"([^"]+)"/);
+    if (titleMatch && titleMatch[1]) {
+      setCardTitle(titleMatch[1]);
+    }
+
+    const arrMatch = code.match(/monthlyRevenue\s*=\s*(\d+)/);
+    if (arrMatch && arrMatch[1]) {
+      const num = parseInt(arrMatch[1], 10);
+      if (!isNaN(num)) setMonthlyRevenue(num);
+    }
+  }, []);
 
   const handleElementSelect = (name: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedElement(name);
     const rect = e.currentTarget.getBoundingClientRect();
-    const parentRect = e.currentTarget.closest(`.${styles.componentContainer}`)?.getBoundingClientRect() || rect;
-    
-    const x = Math.max(0, Math.min(1, (rect.left + rect.width / 2 - parentRect.left) / parentRect.width));
-    const y = Math.max(0, Math.min(1, (rect.top + rect.height / 2 - parentRect.top) / parentRect.height));
+    const parentRect =
+      e.currentTarget.closest(`.${styles.componentContainer}`)?.getBoundingClientRect() ||
+      rect;
+
+    const x = Math.max(
+      0,
+      Math.min(1, (rect.left + rect.width / 2 - parentRect.left) / parentRect.width),
+    );
+    const y = Math.max(
+      0,
+      Math.min(1, (rect.top + rect.height / 2 - parentRect.top) / parentRect.height),
+    );
 
     useSculptStore.getState().setTargetCoordinate({
       x,
@@ -118,39 +236,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({
         metadata: { intent, target: selectedElement },
       });
 
-      // Optimistically apply specific mutations
-      const lower = intent.toLowerCase();
-      let patched = oldCode;
-
-      if (lower.includes("button")) {
-        setHasExtraButton(true);
-        patched = patched.replace(
-          `<button className="primary-btn">Deploy Changes</button>`,
-          `<button className="primary-btn">Deploy Changes</button>\n        <button className="secondary-btn">Audit Log</button>`,
-        );
-      } else if (lower.includes("dark")) {
-        setIsDarkMode((prev) => !prev);
-      } else if (lower.includes("grid") || lower.includes("card")) {
-        setHasExpandedGrid(true);
-      } else if (lower.includes("animate")) {
-        setIsAnimated(true);
-      } else if (lower.includes("contrast")) {
-        setIsHighContrast(true);
-      }
-
-      store.appendLog({
-        step: "AST Mutation Verified",
-        status: "success",
-        metadata: { component: selectedElement, linesChanged: 4 },
-      });
-
-      store.setOldCode(oldCode);
-      store.setNewCode(patched);
-      store.setActiveFile(activeFile);
-
-      // Async sculpt endpoint call in background
       try {
-        await fetch("/api/sculpt", {
+        const response = await fetch("/api/sculpt", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -160,28 +247,99 @@ export const StudioPage: React.FC<StudioPageProps> = ({
             context: { designTokens },
           }),
         });
-      } catch {
-        // Fallback gracefully for local dev
-      }
 
-      store.setAgentStatus("idle");
+        const result = await response.json();
+        if (result.success && result.data) {
+          const { oldCode: prevCode, newCode: nextCode, metadata } = result.data;
+
+          // Dispatch command to history for robust Undo/Redo
+          const cmd = new MutateComponentCommand(
+            `cmd-${Date.now()}`,
+            Date.now(),
+            `src/components/${activeFile}`,
+            prevCode || oldCode,
+            nextCode,
+            {
+              readFile: async () => prevCode,
+              writeFile: async () => {},
+              deleteFile: async () => {},
+              exists: async () => true,
+              listFiles: async () => [],
+              readFiles: async () => new Map(),
+              createSnapshot: async () => "",
+              restoreSnapshot: async () => {},
+              listSnapshots: async () => [],
+            },
+          );
+          store.addCommand(cmd);
+
+          store.setOldCode(prevCode || oldCode);
+          store.setNewCode(nextCode);
+          applyCodeToComponentState(nextCode);
+
+          store.appendLog({
+            step: `AST Mutation Verified (${metadata?.strategyUsed || "Autonomous Engine"})`,
+            status: "success",
+            metadata: {
+              component: selectedElement,
+              durationMs: metadata?.durationMs,
+              tokens: metadata?.tokensUsed,
+            },
+          });
+        } else {
+          throw new Error(result.error || "Synthesis failed");
+        }
+      } catch (err) {
+        console.error("Sculpt error:", err);
+        store.appendLog({
+          step: "Sculpt Execution Failed",
+          status: "error",
+          metadata: { error: err instanceof Error ? err.message : String(err) },
+        });
+      } finally {
+        store.setAgentStatus("idle");
+      }
     },
-    [oldCode, activeFile, selectedElement, designTokens],
+    [oldCode, activeFile, selectedElement, designTokens, applyCodeToComponentState],
   );
 
   const handleUndo = useCallback(async () => {
     const store = useSculptStore.getState();
-    await store.undoLastCommand();
-    setHasExtraButton(false);
-    setHasExpandedGrid(false);
-    setIsAnimated(false);
-    setIsHighContrast(false);
-  }, []);
+    const command = await store.undoLastCommand();
+    if (command && "beforeCode" in command) {
+      const restored = (command as MutateComponentCommand).beforeCode;
+      store.setNewCode(restored);
+      applyCodeToComponentState(restored);
+      store.appendLog({
+        step: "Rollback Executed",
+        status: "success",
+        metadata: { file: activeFile },
+      });
+
+      try {
+        await fetch("/api/rollback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ steps: 1 }),
+        });
+      } catch {}
+    }
+  }, [activeFile, applyCodeToComponentState]);
 
   const handleRedo = useCallback(async () => {
     const store = useSculptStore.getState();
-    await store.redoLastCommand();
-  }, []);
+    const command = await store.redoLastCommand();
+    if (command && "afterCode" in command) {
+      const reapplied = (command as MutateComponentCommand).afterCode;
+      store.setNewCode(reapplied);
+      applyCodeToComponentState(reapplied);
+      store.appendLog({
+        step: "Redo Executed",
+        status: "success",
+        metadata: { file: activeFile },
+      });
+    }
+  }, [activeFile, applyCodeToComponentState]);
 
   return (
     <div className={styles.page}>
@@ -220,7 +378,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({
               </div>
               <div>
                 <div className={styles.cardEyebrow}>Enterprise Cohorts</div>
-                <h2 className={styles.cardTitle}>Acquisition & Revenue Analytics</h2>
+                <h2 className={styles.cardTitle}>{cardTitle}</h2>
               </div>
             </div>
 
@@ -289,7 +447,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({
               <span className={styles.metricLabel}>Net Recurring ARR</span>
               <div className={styles.metricNumberRow}>
                 <span className={styles.metricNumber}>
-                  {period === "annual" ? "$1.78M" : "$148,250"}
+                  {period === "annual"
+                    ? `$${((monthlyRevenue * 12) / 1000000).toFixed(2)}M`
+                    : `$${monthlyRevenue.toLocaleString()}`}
                 </span>
                 <span className={styles.positiveDelta}>+24.8%</span>
               </div>

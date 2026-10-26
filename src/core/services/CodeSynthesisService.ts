@@ -68,7 +68,7 @@ export class CodeSynthesisService {
 
     while (healingAttempts <= maxHealingAttempts) {
       // Step 1: Synthesize patch using strategy
-      const synthesisResult =
+      let synthesisResult =
         await this.strategy.synthesizePatch(currentContext);
 
       this.emitTelemetry({

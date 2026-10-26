@@ -6,6 +6,7 @@ import {
   selectActiveMask,
   selectAgentLogs,
   selectAgentStatus,
+  selectCanRedo,
   selectCanUndo,
   selectDesignTokens,
   useSculptStore,
@@ -57,6 +58,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
   const activeCoordinate = useSculptStore(selectActiveCoordinate);
   const designTokens = useSculptStore(selectDesignTokens);
   const canUndoStore = useSculptStore(selectCanUndo);
+  const canRedoStore = useSculptStore(selectCanRedo);
 
   const [showLogs, setShowLogs] = useState(false);
   const [activeTab, setActiveTab] = useState<"playground" | "3d" | "diff">(
@@ -102,11 +104,14 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
     [onSculpt],
   );
 
-  const handlePromptSubmit = (e: React.FormEvent) => {
+  const handlePromptSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (promptText.trim()) {
-      onSculpt(promptText.trim());
+    const inputEl = e.currentTarget.querySelector('input[name="prompt"]') as HTMLInputElement | null;
+    const finalPrompt = (inputEl?.value || promptText || "").trim();
+    if (finalPrompt) {
+      onSculpt(finalPrompt);
       setPromptText("");
+      if (inputEl) inputEl.value = "";
     }
   };
 
@@ -241,7 +246,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
             <button
               className={styles.headerIconButton}
               onClick={onRedo}
-              disabled={!canRedo}
+              disabled={!canRedo && !canRedoStore}
               title="Redo (Ctrl+Shift+Z)"
               aria-label="Redo"
             >
@@ -405,7 +410,18 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
 
             {activeTab === "3d" && (
               <div className={styles.stagePanel}>
-                <Scene3DTarget />
+                <Scene3DTarget
+                  onTargetSelect={(pos) => {
+                    useSculptStore.getState().setTargetCoordinate({
+                      x: Math.max(0, Math.min(1, (pos[0] + 5) / 10)),
+                      y: Math.max(0, Math.min(1, (pos[1] + 5) / 10)),
+                      viewportWidth: 1280,
+                      viewportHeight: 800,
+                      timestamp: Date.now(),
+                      source: "gesture",
+                    });
+                  }}
+                />
               </div>
             )}
 
@@ -435,6 +451,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                 </svg>
                 <input
                   type="text"
+                  name="prompt"
                   className={styles.commandInput}
                   placeholder="Describe modification or hold Space to talk..."
                   value={promptText}
@@ -451,7 +468,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                 <button
                   type="submit"
                   className={styles.sculptSubmitBtn}
-                  disabled={!promptText.trim() || agentStatus !== "idle"}
+                  disabled={agentStatus !== "idle"}
                 >
                   <span>Sculpt</span>
                   <span className={styles.enterKeyHint}>↵</span>
@@ -515,10 +532,22 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                     {designTokens.colors.primary}
                   </span>
                 </div>
-                <div
-                  className={styles.tokenSwatch}
-                  style={{ background: designTokens.colors.primary }}
-                />
+                <label className={styles.tokenSwatchLabel} title="Click to customize Primary Accent">
+                  <div
+                    className={styles.tokenSwatch}
+                    style={{ background: designTokens.colors.primary }}
+                  />
+                  <input
+                    type="color"
+                    className={styles.colorPickerInput}
+                    value={designTokens.colors.primary}
+                    onChange={(e) =>
+                      useSculptStore.getState().setDesignTokens({
+                        colors: { ...designTokens.colors, primary: e.target.value },
+                      })
+                    }
+                  />
+                </label>
               </div>
               <div className={styles.tokenRow}>
                 <div className={styles.tokenInfo}>
@@ -527,10 +556,22 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                     {designTokens.colors.surface}
                   </span>
                 </div>
-                <div
-                  className={styles.tokenSwatch}
-                  style={{ background: designTokens.colors.surface }}
-                />
+                <label className={styles.tokenSwatchLabel} title="Click to customize Surface Background">
+                  <div
+                    className={styles.tokenSwatch}
+                    style={{ background: designTokens.colors.surface }}
+                  />
+                  <input
+                    type="color"
+                    className={styles.colorPickerInput}
+                    value={designTokens.colors.surface}
+                    onChange={(e) =>
+                      useSculptStore.getState().setDesignTokens({
+                        colors: { ...designTokens.colors, surface: e.target.value },
+                      })
+                    }
+                  />
+                </label>
               </div>
               <div className={styles.tokenRow}>
                 <div className={styles.tokenInfo}>
@@ -539,10 +580,22 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                     {designTokens.colors.text}
                   </span>
                 </div>
-                <div
-                  className={styles.tokenSwatch}
-                  style={{ background: designTokens.colors.text }}
-                />
+                <label className={styles.tokenSwatchLabel} title="Click to customize Text Primary">
+                  <div
+                    className={styles.tokenSwatch}
+                    style={{ background: designTokens.colors.text }}
+                  />
+                  <input
+                    type="color"
+                    className={styles.colorPickerInput}
+                    value={designTokens.colors.text}
+                    onChange={(e) =>
+                      useSculptStore.getState().setDesignTokens({
+                        colors: { ...designTokens.colors, text: e.target.value },
+                      })
+                    }
+                  />
+                </label>
               </div>
               <div className={styles.tokenRow}>
                 <div className={styles.tokenInfo}>
@@ -551,10 +604,22 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                     {designTokens.colors.border}
                   </span>
                 </div>
-                <div
-                  className={styles.tokenSwatch}
-                  style={{ background: designTokens.colors.border }}
-                />
+                <label className={styles.tokenSwatchLabel} title="Click to customize Border Color">
+                  <div
+                    className={styles.tokenSwatch}
+                    style={{ background: designTokens.colors.border }}
+                  />
+                  <input
+                    type="color"
+                    className={styles.colorPickerInput}
+                    value={designTokens.colors.border}
+                    onChange={(e) =>
+                      useSculptStore.getState().setDesignTokens({
+                        colors: { ...designTokens.colors, border: e.target.value },
+                      })
+                    }
+                  />
+                </label>
               </div>
             </div>
           </div>

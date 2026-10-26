@@ -21,8 +21,8 @@ export class MutateComponentCommand implements ICommand {
     public readonly id: string,
     public readonly timestamp: number,
     public readonly targetFile: string,
-    private readonly beforeCode: string,
-    private readonly afterCode: string,
+    public readonly beforeCode: string,
+    public readonly afterCode: string,
     private readonly fileSystem: FileSystemPort,
   ) {}
 

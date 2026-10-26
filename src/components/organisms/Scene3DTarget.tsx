@@ -41,14 +41,14 @@ export const Scene3DTarget: React.FC<Scene3DTargetProps> = ({
           gl.setClearColor(0x000000, 0);
         }}
       >
-        <color attach="background" args={["#F9FAFB"]} />
-        <fog attach="fog" args={["#F9FAFB", 1, 20]} />
+        <color attach="background" args={["#0d0f17"]} />
+        <fog attach="fog" args={["#0d0f17", 1, 20]} />
 
         {/* Lighting */}
-        <ambientLight intensity={0.6} />
+        <ambientLight intensity={0.8} />
         <directionalLight
           position={[5, 10, 7]}
-          intensity={1}
+          intensity={1.2}
           castShadow
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
@@ -65,17 +65,17 @@ export const Scene3DTarget: React.FC<Scene3DTargetProps> = ({
         >
           <planeGeometry args={[20, 20]} />
           <meshStandardMaterial
-            color="#E5E7EB"
+            color="#1e293b"
             roughness={0.9}
-            metalness={0}
+            metalness={0.1}
             transparent
-            opacity={0.5}
+            opacity={0.7}
           />
         </mesh>
 
         {/* Grid helper */}
         <gridHelper
-          args={[20, 20, "#D1D5DB", "#E5E7EB"]}
+          args={[20, 20, "#3b82f6", "#1e293b"]}
           position={[0, -0.01, 0]}
         />
 

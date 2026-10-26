@@ -30,6 +30,7 @@ interface SculptState {
     metadata?: Record<string, unknown>;
   }>;
   commandHistory: ICommand[];
+  redoHistory: ICommand[];
   designTokens: DesignTokens;
   isRecording: boolean;
   audioLevel: number;
@@ -48,8 +49,8 @@ interface SculptState {
   }) => void;
   clearLogs: () => void;
   addCommand: (command: ICommand) => void;
-  undoLastCommand: () => Promise<void>;
-  redoLastCommand: () => Promise<void>;
+  undoLastCommand: () => Promise<ICommand | null>;
+  redoLastCommand: () => Promise<ICommand | null>;
   setDesignTokens: (tokens: Partial<DesignTokens>) => void;
   setRecording: (recording: boolean) => void;
   setAudioLevel: (level: number) => void;
@@ -98,6 +99,7 @@ export const useSculptStore = create<SculptState>()(
     agentStatus: "idle",
     agentLogs: [],
     commandHistory: [],
+    redoHistory: [],
     designTokens: defaultDesignTokens,
     isRecording: false,
     audioLevel: 0,
@@ -122,25 +124,37 @@ export const useSculptStore = create<SculptState>()(
     addCommand: (command) =>
       set((state) => ({
         commandHistory: [...state.commandHistory, command],
+        redoHistory: [],
       })),
 
     undoLastCommand: async () => {
       const { commandHistory } = get();
-      if (commandHistory.length === 0) return;
+      if (commandHistory.length === 0) return null;
 
       const lastCommand = commandHistory[commandHistory.length - 1];
-      if (!lastCommand) return;
+      if (!lastCommand) return null;
       await lastCommand.undo();
 
       set((state) => ({
         commandHistory: state.commandHistory.slice(0, -1),
+        redoHistory: [...state.redoHistory, lastCommand],
       }));
+      return lastCommand;
     },
 
     redoLastCommand: async () => {
-      // Redo would require a separate redo stack
-      // For now, this is a placeholder
-      console.warn("Redo not yet implemented");
+      const { redoHistory } = get();
+      if (redoHistory.length === 0) return null;
+
+      const nextCommand = redoHistory[redoHistory.length - 1];
+      if (!nextCommand) return null;
+      await nextCommand.execute();
+
+      set((state) => ({
+        redoHistory: state.redoHistory.slice(0, -1),
+        commandHistory: [...state.commandHistory, nextCommand],
+      }));
+      return nextCommand;
     },
 
     setDesignTokens: (tokens) =>
@@ -165,6 +179,7 @@ export const useSculptStore = create<SculptState>()(
         agentStatus: "idle",
         agentLogs: [],
         commandHistory: [],
+        redoHistory: [],
         designTokens: defaultDesignTokens,
         isRecording: false,
         audioLevel: 0,
@@ -190,7 +205,8 @@ export const selectIsRecording = (state: SculptState) => state.isRecording;
 export const selectAudioLevel = (state: SculptState) => state.audioLevel;
 export const selectCanUndo = (state: SculptState) =>
   state.commandHistory.length > 0;
-export const selectCanRedo = (state: SculptState) => false; // Redo not yet implemented
+export const selectCanRedo = (state: SculptState) =>
+  state.redoHistory.length > 0;
 export const selectActiveFile = (state: SculptState) => state.activeFile;
 export const selectNewCode = (state: SculptState) => state.newCode;
 export const selectOldCode = (state: SculptState) => state.oldCode;

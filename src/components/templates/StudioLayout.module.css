@@ -719,6 +719,28 @@
   height: 24px;
   border-radius: var(--border-radius-xs);
   border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform var(--transition-fast);
+}
+
+.tokenSwatch:hover {
+  transform: scale(1.1);
+}
+
+.tokenSwatchLabel {
+  position: relative;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.colorPickerInput {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .propertyGroup {
