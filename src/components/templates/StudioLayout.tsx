@@ -27,6 +27,8 @@ interface StudioLayoutProps {
   canUndo: boolean;
   canRedo: boolean;
   activeFile?: string;
+  availableFiles?: string[];
+  onFileSelect?: (file: string) => void;
   oldCode?: string;
   newCode?: string;
   presets?: Array<{ label: string; intent: string }>;
@@ -46,6 +48,8 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
   canUndo,
   canRedo,
   activeFile = "DashboardHero.tsx",
+  availableFiles = ["DashboardHero.tsx"],
+  onFileSelect,
   oldCode,
   newCode,
   presets = [],
@@ -152,7 +156,22 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
 
           <div className={styles.filePill} title={activeFile}>
             <span className={styles.fileDot} />
-            <span className={styles.fileName}>{activeFile}</span>
+            {availableFiles && availableFiles.length > 1 && onFileSelect ? (
+              <select
+                className={styles.fileSelect}
+                value={activeFile}
+                onChange={(e) => onFileSelect(e.target.value)}
+                aria-label="Select target component file"
+              >
+                {availableFiles.map((file) => (
+                  <option key={file} value={file} className={styles.fileOption}>
+                    {file}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className={styles.fileName}>{activeFile}</span>
+            )}
           </div>
 
           {/* Device Viewport Selector */}

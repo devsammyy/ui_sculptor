@@ -81,7 +81,6 @@ export const PushToTalkTrigger: React.FC<PushToTalkTriggerProps> = ({
         stopRecording();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
 

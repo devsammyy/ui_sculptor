@@ -66,6 +66,23 @@
   color: var(--color-text-secondary);
 }
 
+.fileSelect {
+  background: transparent;
+  color: inherit;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  padding-right: 4px;
+}
+
+.fileOption {
+  background: #111827;
+  color: #ffffff;
+}
+
 .fileDot {
   width: 6px;
   height: 6px;

@@ -52,73 +52,83 @@ export async function POST(request: NextRequest) {
     // Process SAM 3.1 Segmentation if image provided
     let segmentationMask = null;
     if (imageBase64) {
-      const samUrl = process.env["SAM_API_URL"] || "http://localhost:8001";
-      try {
-        const samResponse = await fetch(`${samUrl}/segment`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image: `data:${imageMimeType};base64,${imageBase64}`,
-            points: [],
-          }),
-          signal: AbortSignal.timeout(5000),
-        });
+      const metaApiKey = process.env["META_API_KEY"];
+      const samUrl = process.env["SAM_API_URL"] || "https://api.meta.ai/v1";
+      const samResponse = await fetch(`${samUrl}/segment`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(metaApiKey ? { Authorization: `Bearer ${metaApiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          image: `data:${imageMimeType};base64,${imageBase64}`,
+          points: [],
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
 
-        if (samResponse.ok) {
-          const samData = await samResponse.json();
-          segmentationMask = {
-            maskData: samData.mask || [],
-            bounds: samData.bounds || { x: 0, y: 0, width: 0, height: 0 },
-            confidence: samData.confidence || 0.95,
-            viewportWidth,
-            viewportHeight,
-          };
-        }
-      } catch {
-        // Fallback bounding box mask
-        segmentationMask = {
-          maskData: [],
-          bounds: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
-          confidence: 0.9,
-          viewportWidth,
-          viewportHeight,
-        };
+      if (!samResponse.ok) {
+        const errorText = await samResponse.text().catch(() => "");
+        throw new Error(`SAM 3.1 API error (${samResponse.status}): ${errorText}`);
       }
+
+      const samData = await samResponse.json();
+      segmentationMask = {
+        maskData: samData.mask || [],
+        bounds: samData.bounds || { x: 0, y: 0, width: 0, height: 0 },
+        confidence: samData.confidence || 0.95,
+        viewportWidth,
+        viewportHeight,
+      };
     }
 
     // Process Muse Voice API if audio provided
     let transcription = "";
     if (audioBase64) {
+      const metaApiKey = process.env["META_API_KEY"];
       const museVoiceUrl =
-        process.env["MUSE_VOICE_API_URL"] || "http://localhost:8002";
-      try {
-        const voiceResponse = await fetch(`${museVoiceUrl}/transcribe`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            audio: `data:${audioMimeType};base64,${audioBase64}`,
-            language: "en",
-          }),
-          signal: AbortSignal.timeout(5000),
-        });
+        process.env["MUSE_VOICE_API_URL"] || "https://api.meta.ai/v1";
 
-        if (voiceResponse.ok) {
-          const voiceData = await voiceResponse.json();
-          transcription = voiceData.text || "";
-        }
-      } catch {
-        // Voice transcription fallback simulation for offline/browser dev
-        const sampleIntents = [
-          "Add a secondary audit log button with icon",
-          "Toggle obsidian dark palette",
-          "Expand analytics metrics to a 4-column KPI grid",
-          "Add entrance spring animations and hover micro-interactions",
-          "Enhance color contrast and WCAG AA accessibility compliance",
-        ];
-        transcription =
-          sampleIntents[Math.floor(Math.random() * sampleIntents.length)] ||
-          "Add a secondary button";
+      // Build multipart form for the transcription endpoint
+      const audioBuffer = Buffer.from(audioBase64, "base64");
+      const boundary = "----MetaVoiceBoundary" + Date.now().toString(16);
+      const ext = audioMimeType.includes("ogg") ? "ogg" : "webm";
+
+      const formParts = [
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.${ext}"\r\nContent-Type: ${audioMimeType}\r\n\r\n`,
+        audioBuffer,
+        `\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nmuse-voice-transcribe-1.0\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nen\r\n`,
+        `--${boundary}--\r\n`,
+      ];
+
+      const bodyParts = formParts.map((p) =>
+        typeof p === "string" ? Buffer.from(p, "utf-8") : p,
+      );
+      const body = Buffer.concat(bodyParts);
+
+      const voiceResponse = await fetch(
+        `${museVoiceUrl}/audio/transcriptions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": `multipart/form-data; boundary=${boundary}`,
+            ...(metaApiKey
+              ? { Authorization: `Bearer ${metaApiKey}` }
+              : {}),
+          },
+          body,
+          signal: AbortSignal.timeout(15000),
+        },
+      );
+
+      if (!voiceResponse.ok) {
+        const errorText = await voiceResponse.text().catch(() => "");
+        throw new Error(`Muse Voice API error (${voiceResponse.status}): ${errorText}`);
       }
+
+      const voiceData = await voiceResponse.json();
+      transcription = voiceData.text || "";
     }
 
     return NextResponse.json({

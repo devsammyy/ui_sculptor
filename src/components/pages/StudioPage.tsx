@@ -148,21 +148,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({
   const [isHighContrast, setIsHighContrast] = useState(_persisted.isHighContrast);
   const [isAnimated, setIsAnimated] = useState(_persisted.isAnimated);
   const [selectedElement, setSelectedElement] = useState<string>("HeroCard");
-
-  // Persist canvas state to localStorage whenever it changes
-  useEffect(() => {
-    const currentCode = newCode || oldCode;
-    saveCanvasState({
-      code: currentCode,
-      hasExtraButton,
-      hasExpandedGrid,
-      isDarkMode,
-      isHighContrast,
-      isAnimated,
-      cardTitle,
-      monthlyRevenue,
-    });
-  }, [hasExtraButton, hasExpandedGrid, isDarkMode, isHighContrast, isAnimated, cardTitle, monthlyRevenue, newCode, oldCode]);
+  const [availableFiles, setAvailableFiles] = useState<string[]>(["DashboardHero.tsx"]);
 
   const applyCodeToComponentState = useCallback((code: string) => {
     setHasExtraButton(
@@ -198,6 +184,34 @@ export const StudioPage: React.FC<StudioPageProps> = ({
       if (!isNaN(num)) setMonthlyRevenue(num);
     }
   }, []);
+
+  // Fetch all available component files on mount
+  useEffect(() => {
+    fetch("/api/components")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.files) && data.files.length > 0) {
+          setAvailableFiles(data.files);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Handler to switch files dynamically
+  const handleFileSelect = useCallback(async (newFile: string) => {
+    useSculptStore.getState().setActiveFile(newFile);
+    try {
+      const res = await fetch(`/api/components/${newFile}`);
+      const data = await res.json();
+      if (data.success && data.code) {
+        useSculptStore.getState().setOldCode(data.code);
+        useSculptStore.getState().setNewCode(data.code);
+        applyCodeToComponentState(data.code);
+      }
+    } catch (err) {
+      console.error("Failed to load file content:", err);
+    }
+  }, [applyCodeToComponentState]);
 
   const handleElementSelect = (name: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -350,6 +364,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({
         canUndo={Boolean(canUndo)}
         canRedo={Boolean(canRedo)}
         activeFile={activeFile}
+        availableFiles={availableFiles}
+        onFileSelect={handleFileSelect}
         oldCode={oldCode}
         newCode={newCode}
         presets={initialPresets}

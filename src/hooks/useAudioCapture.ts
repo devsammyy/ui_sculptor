@@ -7,8 +7,25 @@ export interface UseAudioCaptureReturn {
   isRecording: boolean;
   audioLevel: number;
   startRecording: () => Promise<void>;
-  stopRecording: () => Promise<Blob | null>;
+  stopRecording: () => void;
   error: string | null;
+}
+
+/** Pick the best supported MIME type for this browser */
+function getSupportedMimeType(): string {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+    "audio/mp4",
+  ];
+  for (const mime of candidates) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(mime)) {
+      return mime;
+    }
+  }
+  return ""; // let the browser decide
 }
 
 export function useAudioCapture(
@@ -21,29 +38,32 @@ export function useAudioCapture(
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isRecordingRef = useRef(false); // stable ref for the rAF loop
+  const onTranscriptionRef = useRef(onTranscription);
 
-  // Audio level visualization
-  const updateAudioLevel = useCallback(() => {
-    if (!analyserRef.current) return;
+  // Keep ref in sync so the onstop closure always sees the latest callback
+  useEffect(() => {
+    onTranscriptionRef.current = onTranscription;
+  }, [onTranscription]);
+
+  /** Runs in a requestAnimationFrame loop while recording */
+  const tickAudioLevel = useCallback(() => {
+    if (!analyserRef.current || !isRecordingRef.current) return;
 
     const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     analyserRef.current.getByteFrequencyData(dataArray);
+    const avg = dataArray.reduce((a, v) => a + v, 0) / dataArray.length;
+    setAudioLevel(Math.min(avg / 128, 1));
 
-    // Calculate average volume
-    const sum = dataArray.reduce((acc, val) => acc + val, 0);
-    const average = sum / dataArray.length;
-    const normalized = Math.min(average / 128, 1); // Normalize to 0-1
-
-    setAudioLevel(normalized);
-
-    if (isRecording) {
-      animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
-    }
-  }, [isRecording]);
+    animationFrameRef.current = requestAnimationFrame(tickAudioLevel);
+  }, []);
 
   const startRecording = useCallback(async () => {
+    if (isRecordingRef.current) return; // already recording
+
     try {
       setError(null);
 
@@ -52,24 +72,25 @@ export function useAudioCapture(
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: 16000,
         },
       });
 
       streamRef.current = stream;
 
-      // Set up audio analysis for visualization
+      // Audio level analysis
       const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      // Set up MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
-
+      // Pick a MIME type the browser actually supports
+      const mimeType = getSupportedMimeType();
+      const recorderOptions = mimeType ? { mimeType } : {};
+      const mediaRecorder = new MediaRecorder(stream, recorderOptions);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -79,91 +100,73 @@ export function useAudioCapture(
         }
       };
 
+      // Single authoritative onstop — calls the transcription callback
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: "audio/webm;codecs=opus",
+        const blob = new Blob(audioChunksRef.current, {
+          type: mimeType || "audio/webm",
         });
-        if (onTranscription && audioBlob.size > 0) {
-          await onTranscription(audioBlob);
+        if (onTranscriptionRef.current && blob.size > 0) {
+          await onTranscriptionRef.current(blob);
         }
       };
 
-      mediaRecorder.start(100); // Collect data every 100ms
+      mediaRecorder.start(100);
+      isRecordingRef.current = true;
       setIsRecording(true);
-      updateAudioLevel();
+
+      // Start the level meter loop
+      animationFrameRef.current = requestAnimationFrame(tickAudioLevel);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Failed to start recording";
+        err instanceof Error ? err.message : "Microphone access denied";
       setError(message);
-      console.error("Audio capture error:", err);
+      console.error("[useAudioCapture] startRecording error:", err);
     }
-  }, [onTranscription, updateAudioLevel]);
+  }, [tickAudioLevel]);
 
-  const stopRecording = useCallback(async (): Promise<Blob | null> => {
-    return new Promise((resolve) => {
-      if (!mediaRecorderRef.current || !isRecording) {
-        resolve(null);
-        return;
-      }
+  const stopRecording = useCallback(() => {
+    if (!mediaRecorderRef.current || !isRecordingRef.current) return;
 
-      const mediaRecorder = mediaRecorderRef.current;
+    // Stop the level meter
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: "audio/webm;codecs=opus",
-        });
-        resolve(audioBlob);
-      };
+    // Stop the recorder — triggers onstop which fires the transcription callback
+    if (mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
 
-      mediaRecorder.stop();
+    // Release mic
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
 
-      // Stop all tracks
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
+    // Close AudioContext
+    audioContextRef.current?.close().catch(() => {});
+    audioContextRef.current = null;
+    analyserRef.current = null;
 
-      // Clean up audio context
-      if (analyserRef.current) {
-        analyserRef.current.disconnect();
-        analyserRef.current = null;
-      }
-
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-
-      setIsRecording(false);
-      setAudioLevel(0);
-    });
-  }, [isRecording]);
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    setAudioLevel(0);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (animationFrameRef.current) {
+      if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (mediaRecorderRef.current?.state !== "inactive") {
+        mediaRecorderRef.current?.stop();
       }
-      if (
-        mediaRecorderRef.current &&
-        mediaRecorderRef.current.state !== "inactive"
-      ) {
-        mediaRecorderRef.current.stop();
-      }
+      audioContextRef.current?.close().catch(() => {});
     };
   }, []);
 
-  return {
-    isRecording,
-    audioLevel,
-    startRecording,
-    stopRecording,
-    error,
-  };
+  return { isRecording, audioLevel, startRecording, stopRecording, error };
 }
 
 /**

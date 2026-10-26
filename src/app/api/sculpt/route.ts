@@ -1,15 +1,11 @@
 import { DiskFileSystemAdapter } from "@/infrastructure/adapters/file-system-adapters";
 import { NextRequest, NextResponse } from "next/server";
-import {
-  AutonomousAstSculptStrategy,
-  HostedMetaStrategy,
-} from "@/core/domain/strategies/model-strategy";
+import { HostedMetaStrategy } from "@/core/domain/strategies/model-strategy";
 import { SynthesisContext } from "@/core/domain/models/viewport-target";
 
 /**
  * POST /api/sculpt
- * Core mutation endpoint — routes to hosted Muse Wonder 1.0 (Meta API)
- * Falls back to AutonomousAstSculptStrategy when API key is absent
+ * Core mutation endpoint — routes strictly to hosted Muse Wonder 1.0 (Meta API)
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -43,7 +39,6 @@ export async function POST(request: NextRequest) {
     try {
       sourceCode = await fileSystem.readFile(filePath);
     } catch {
-      // File may not exist yet — start with empty scaffold
       sourceCode = "";
     }
 
@@ -94,21 +89,22 @@ export async function POST(request: NextRequest) {
       projectFiles: new Map([[filePath, sourceCode]]),
     };
 
-    // Pick strategy: hosted Muse Wonder (hackathon requirement) → AST fallback
+    // Strict Hosted Meta API execution (Hackathon & Spec requirement)
     const metaApiKey = process.env["META_API_KEY"];
     const museWonderUrl =
       process.env["MUSE_WONDER_API_URL"] || "https://api.meta.ai/v1";
 
-    let strategy: HostedMetaStrategy | AutonomousAstSculptStrategy;
-    if (metaApiKey) {
-      strategy = new HostedMetaStrategy(metaApiKey, museWonderUrl);
-    } else {
-      console.warn(
-        "[sculpt] META_API_KEY not set — falling back to AutonomousAstSculptStrategy",
+    if (!metaApiKey) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "META_API_KEY environment variable is required to execute Muse Wonder 1.0",
+        },
+        { status: 500 },
       );
-      strategy = new AutonomousAstSculptStrategy();
     }
 
+    const strategy = new HostedMetaStrategy(metaApiKey, museWonderUrl);
     const result = await strategy.synthesizePatch(synthesisContext);
 
     if (!result.success || !result.patchedCode) {
@@ -116,7 +112,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error:
-            result.diagnostics[0]?.message || "Synthesis failed — no patched code returned",
+            result.diagnostics[0]?.message || "Synthesis failed — no patched code returned from Meta API",
         },
         { status: 500 },
       );
@@ -125,8 +121,30 @@ export async function POST(request: NextRequest) {
     // Persist the patched file to disk
     try {
       await fileSystem.writeFile(filePath, result.patchedCode);
+
+      // Record in undo history file for persistent rollbacks
+      const historyPath = ".ui-sculptor/history.json";
+      let history: Array<{
+        filePath: string;
+        oldCode: string;
+        newCode: string;
+        timestamp: number;
+      }> = [];
+      try {
+        const historyContent = await fileSystem.readFile(historyPath);
+        history = JSON.parse(historyContent);
+      } catch {
+        // history file does not exist yet
+      }
+      history.push({
+        filePath,
+        oldCode: sourceCode,
+        newCode: result.patchedCode,
+        timestamp: Date.now(),
+      });
+      await fileSystem.writeFile(historyPath, JSON.stringify(history, null, 2));
     } catch (writeErr) {
-      console.error("[sculpt] Failed to write patched file:", writeErr);
+      console.error("[sculpt] Failed to write patched file / history:", writeErr);
     }
 
     return NextResponse.json({
