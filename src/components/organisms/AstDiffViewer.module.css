@@ -1,0 +1,190 @@
+.container {
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--border-radius-lg, 1rem);
+  overflow: hidden;
+  background: var(--color-background, #ffffff);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-surface, #f9fafb);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fileInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fileIcon {
+  color: var(--color-secondary, #6b7280);
+}
+
+.fileName {
+  font-family: var(--font-mono, "JetBrains Mono", "Fira Code", monospace);
+  font-size: 0.8rem;
+  color: var(--color-text, #111827);
+  font-weight: 500;
+}
+
+.viewToggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--border-radius-md, 0.5rem);
+  overflow: hidden;
+}
+
+.toggleButton {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-secondary, #6b7280);
+  background: var(--color-background, #ffffff);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggleButton:first-child {
+  border-right: 1px solid var(--color-border, #e5e7eb);
+}
+
+.toggleButton:hover:not(.active) {
+  background: var(--color-surface, #f9fafb);
+  color: var(--color-text, #111827);
+}
+
+.toggleButton.active {
+  background: var(--color-primary, #0066cc);
+  color: white;
+}
+
+.diffContent {
+  overflow: auto;
+  max-height: 60vh;
+}
+
+.unifiedView {
+  width: 100%;
+}
+
+.splitView {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.splitPane {
+  display: flex;
+  flex-direction: column;
+}
+
+.splitPane:first-child {
+  border-right: 1px solid var(--color-border, #e5e7eb);
+}
+
+.paneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--color-surface, #f9fafb);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.paneTitle {
+  color: var(--color-text, #111827);
+}
+
+.paneCount {
+  color: var(--color-secondary, #6b7280);
+  font-family: var(--font-mono, "JetBrains Mono", "Fira Code", monospace);
+  font-weight: 400;
+}
+
+.diffTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono, "JetBrains Mono", "Fira Code", monospace);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.diffRow {
+  transition: background 0.1s ease;
+}
+
+.diffRow.added {
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.diffRow.removed {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.diffRow.unchanged:hover {
+  background: var(--color-surface, #f9fafb);
+}
+
+.lineNumber {
+  width: 50px;
+  padding: 0 12px;
+  text-align: right;
+  color: var(--color-secondary, #6b7280);
+  background: var(--color-surface, #f9fafb);
+  border-right: 1px solid var(--color-border, #e5e7eb);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineContent {
+  padding: 0 12px;
+  white-space: pre;
+  word-break: break-all;
+}
+
+.linePrefix {
+  display: inline-block;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.added .linePrefix {
+  color: #10b981;
+}
+
+.removed .linePrefix {
+  color: #ef4444;
+}
+
+.codeLine {
+  color: var(--color-text, #111827);
+}
+
+.added .codeLine {
+  color: #065f46;
+}
+
+.removed .codeLine {
+  color: #991b1b;
+  text-decoration: line-through;
+}
+
+@media (max-width: 768px) {
+  .splitView {
+    grid-template-columns: 1fr;
+  }
+
+  .splitPane:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border, #e5e7eb);
+  }
+}
