@@ -68,19 +68,6 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
             {title}
           </h2>
         </div>
-        <span
-          style={{
-            padding: "4px 10px",
-            borderRadius: "9999px",
-            fontSize: "11px",
-            fontWeight: 600,
-            background: "rgba(16, 185, 129, 0.12)",
-            color: "#10b981",
-            border: "1px solid rgba(16, 185, 129, 0.25)",
-          }}
-        >
-          ● Live Release v2.8
-        </span>
       </header>
 
       <div

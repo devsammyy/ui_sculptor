@@ -14,6 +14,8 @@ import {
   useSculptStore,
 } from "../../hooks/useSculptStore";
 import { StudioLayout } from "../templates/StudioLayout";
+import { ProductCard } from "../ProductCard";
+import { AnalyticsCard } from "../AnalyticsCard";
 import styles from "./StudioPage.module.css";
 
 interface StudioPageProps {
@@ -370,11 +372,27 @@ export const StudioPage: React.FC<StudioPageProps> = ({
         newCode={newCode}
         presets={initialPresets}
       >
-        {/* Live Interactive Component on the Design Canvas */}
-        <div
-          className={`${styles.componentContainer} ${isDarkMode ? styles.darkTheme : styles.lightTheme} ${isHighContrast ? styles.highContrast : ""} ${isAnimated ? styles.animated : ""}`}
-          onClick={(e) => handleElementSelect("DashboardHero", e)}
-        >
+        {/* Render the currently selected component file */}
+        {activeFile === "ProductCard.tsx" ? (
+          <div
+            className={styles.componentContainer}
+            onClick={(e) => handleElementSelect("ProductCard", e)}
+          >
+            <ProductCard />
+          </div>
+        ) : activeFile === "AnalyticsCard.tsx" ? (
+          <div
+            className={styles.componentContainer}
+            onClick={(e) => handleElementSelect("AnalyticsCard", e)}
+          >
+            <AnalyticsCard />
+          </div>
+        ) : (
+          /* Default DashboardHero Component on the Design Canvas */
+          <div
+            className={`${styles.componentContainer} ${isDarkMode ? styles.darkTheme : styles.lightTheme} ${isHighContrast ? styles.highContrast : ""} ${isAnimated ? styles.animated : ""}`}
+            onClick={(e) => handleElementSelect("DashboardHero", e)}
+          >
           {/* Card Header */}
           <div
             className={styles.cardHeader}
@@ -560,6 +578,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({
             </div>
           </div>
         </div>
+        )}
       </StudioLayout>
     </div>
   );
