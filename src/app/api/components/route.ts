@@ -5,10 +5,21 @@ export async function GET() {
   try {
     const fs = new DiskFileSystemAdapter(process.cwd());
     const files = await fs.listFiles("src/components");
-    // Filter to top-level .tsx component files
     const componentFiles = files
-      .filter((f) => f.endsWith(".tsx") && !f.includes("/atoms/") && !f.includes("/molecules/") && !f.includes("/organisms/") && !f.includes("/templates/") && !f.includes("/pages/"))
-      .map((f) => f.replace(/^src\/components\//, ""));
+      .filter((f) => {
+        if (!f.endsWith(".tsx")) return false;
+        if (
+          f.includes("/atoms/") ||
+          f.includes("/molecules/") ||
+          f.includes("/templates/") ||
+          f.includes("/pages/")
+        ) {
+          return false;
+        }
+        const rel = f.replace(/^src\/components\//, "");
+        return !rel.includes("/") || rel === "organisms/Scene3DTarget.tsx";
+      })
+      .map((f) => f.replace(/^src\/components\/(organisms\/)?/, ""));
 
     return NextResponse.json({
       success: true,

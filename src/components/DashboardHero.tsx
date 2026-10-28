@@ -5,6 +5,7 @@ import React from "react";
 export interface DashboardHeroProps {
   title?: string;
   monthlyRevenue?: number;
+  revenueTarget?: number;
   activeCohorts?: number;
   conversionRate?: number;
   isDarkMode?: boolean;
@@ -19,29 +20,52 @@ export interface DashboardHeroProps {
 export const DashboardHero: React.FC<DashboardHeroProps> = ({
   title = "Mode & Revenue Analytics",
   monthlyRevenue = 148250,
+  revenueTarget = 200000,
   activeCohorts = 48290,
   conversionRate = 5.84,
   isDarkMode = true,
   hasExtraButton = true,
   hasExpandedGrid = false,
   isAnimated = false,
-  isHighContrast = false,
+  isHighContrast = true,
   onDeploy,
   onAuditLog,
 }) => {
+  const revenueProgress =
+    revenueTarget > 0
+      ? Math.min(100, (monthlyRevenue / revenueTarget) * 100)
+      : 0;
+
+  const isObsidianHighContrast = isHighContrast;
+  const mutedColor = isObsidianHighContrast ? "#E5E7EB" : "#94a3b8";
+  const cardBackground = isObsidianHighContrast
+    ? "#0A0A0C"
+    : "rgba(255, 255, 255, 0.03)";
+  const cardBorder = isObsidianHighContrast
+    ? "1px solid rgba(255, 255, 255, 0.55)"
+    : "1px solid rgba(255, 255, 255, 0.07)";
+
   return (
     <div
-      className={`dashboard-hero ${isDarkMode ? "dark" : "light"} ${
-        isHighContrast ? "high-contrast" : ""
+      className={`dashboard-hero ${isDarkMode || isObsidianHighContrast ? "dark" : "light"} ${
+        isHighContrast ? "high-contrast obsidian" : ""
       } ${isAnimated ? "animated" : ""}`}
       style={{
         borderRadius: "16px",
         padding: "24px",
-        background: isDarkMode ? "rgba(18, 21, 30, 0.94)" : "#ffffff",
+        background: isObsidianHighContrast
+          ? "#050505"
+          : isDarkMode
+            ? "rgba(18, 21, 30, 0.94)"
+            : "#ffffff",
         border: isHighContrast
           ? "2px solid #ffffff"
           : "1px solid rgba(255, 255, 255, 0.1)",
-        color: isDarkMode ? "#f3f4f6" : "#0f172a",
+        color: isObsidianHighContrast
+          ? "#ffffff"
+          : isDarkMode
+            ? "#f3f4f6"
+            : "#0f172a",
       }}
     >
       <header
@@ -59,7 +83,7 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
               fontWeight: 600,
               textTransform: "uppercase",
               letterSpacing: "0.08em",
-              color: "#3b82f6",
+              color: isObsidianHighContrast ? "#93C5FD" : "#3b82f6",
             }}
           >
             Enterprise Cohorts
@@ -82,15 +106,20 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
         }}
       >
         <div
-          className="metric-card"
+          className="metric-card metric-card--target-revenue"
+          data-metric="revenue"
+          data-target-revenue={revenueTarget}
+          aria-label={`Target revenue: $${monthlyRevenue.toLocaleString()} of $${revenueTarget.toLocaleString()} target, ${revenueProgress.toFixed(1)} percent`}
           style={{
-            background: "rgba(255, 255, 255, 0.03)",
-            border: "1px solid rgba(255, 255, 255, 0.07)",
+            background: cardBackground,
+            border: isObsidianHighContrast
+              ? "2px solid #0066CC"
+              : "1px solid #0066CC",
             borderRadius: "12px",
             padding: "14px",
           }}
         >
-          <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+          <span style={{ fontSize: "12px", color: mutedColor }}>
             Net Recurring ARR
           </span>
           <div
@@ -117,18 +146,52 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
               +24.8%
             </span>
           </div>
+          <div
+            style={{
+              fontSize: "12px",
+              color: isObsidianHighContrast ? "#D1D5DB" : "#6B7280",
+              marginTop: "0.25rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            Target ${revenueTarget.toLocaleString()} &middot;{" "}
+            {revenueProgress.toFixed(1)}% of target
+          </div>
+          <div
+            role="progressbar"
+            aria-label="Progress toward target revenue"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(revenueProgress)}
+            style={{
+              width: "100%",
+              height: "0.5rem",
+              background: "#E5E7EB",
+              borderRadius: "9999px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${revenueProgress}%`,
+                height: "100%",
+                background: "#0066CC",
+                borderRadius: "9999px",
+              }}
+            />
+          </div>
         </div>
 
         <div
           className="metric-card"
           style={{
-            background: "rgba(255, 255, 255, 0.03)",
-            border: "1px solid rgba(255, 255, 255, 0.07)",
+            background: cardBackground,
+            border: cardBorder,
             borderRadius: "12px",
             padding: "14px",
           }}
         >
-          <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+          <span style={{ fontSize: "12px", color: mutedColor }}>
             Active Cohorts
           </span>
           <div
@@ -160,13 +223,13 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
         <div
           className="metric-card"
           style={{
-            background: "rgba(255, 255, 255, 0.03)",
-            border: "1px solid rgba(255, 255, 255, 0.07)",
+            background: cardBackground,
+            border: cardBorder,
             borderRadius: "12px",
             padding: "14px",
           }}
         >
-          <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+          <span style={{ fontSize: "12px", color: mutedColor }}>
             Conversion Rate
           </span>
           <div
@@ -199,13 +262,13 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
           <div
             className="metric-card"
             style={{
-              background: "rgba(255, 255, 255, 0.03)",
-              border: "1px solid rgba(255, 255, 255, 0.07)",
+              background: cardBackground,
+              border: cardBorder,
               borderRadius: "12px",
               padding: "14px",
             }}
           >
-            <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+            <span style={{ fontSize: "12px", color: mutedColor }}>
               Customer LTV
             </span>
             <div
@@ -242,10 +305,12 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
           justifyContent: "space-between",
           alignItems: "center",
           paddingTop: "12px",
-          borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+          borderTop: isObsidianHighContrast
+            ? "1px solid rgba(255, 255, 255, 0.35)"
+            : "1px solid rgba(255, 255, 255, 0.06)",
         }}
       >
-        <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+        <span style={{ fontSize: "12px", color: mutedColor }}>
           Trusted by 4,200+ engineering teams
         </span>
         <div style={{ display: "flex", gap: "8px" }}>
@@ -258,9 +323,13 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
               style={{
                 padding: "0.5rem 1rem",
                 borderRadius: "0.5rem",
-                background: "rgba(255, 255, 255, 0.06)",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                color: "#f3f4f6",
+                background: isObsidianHighContrast
+                  ? "#111114"
+                  : "rgba(255, 255, 255, 0.06)",
+                border: isObsidianHighContrast
+                  ? "1px solid rgba(255, 255, 255, 0.55)"
+                  : "1px solid rgba(255, 255, 255, 0.12)",
+                color: isObsidianHighContrast ? "#ffffff" : "#f3f4f6",
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
@@ -295,9 +364,11 @@ export const DashboardHero: React.FC<DashboardHeroProps> = ({
             style={{
               padding: "8px 16px",
               borderRadius: "8px",
-              background: "#3b82f6",
+              background: isObsidianHighContrast ? "#0066CC" : "#3b82f6",
               color: "#ffffff",
-              border: "none",
+              border: isObsidianHighContrast
+                ? "1px solid #ffffff"
+                : "none",
               fontWeight: 600,
               cursor: "pointer",
             }}

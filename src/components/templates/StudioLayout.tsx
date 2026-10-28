@@ -12,6 +12,7 @@ import {
   useSculptStore,
 } from "../../hooks/useSculptStore";
 import { PushToTalkTrigger } from "../molecules/PushToTalkTrigger";
+import { TokenColorPicker } from "../molecules/TokenColorPicker";
 import { AgentLogDrawer } from "../organisms/AgentLogDrawer";
 import { AstDiffViewer } from "../organisms/AstDiffViewer";
 import { QuickActionRibbon } from "../organisms/QuickActionRibbon";
@@ -34,6 +35,13 @@ interface StudioLayoutProps {
   presets?: Array<{ label: string; intent: string }>;
   viewportMode?: "desktop" | "tablet" | "mobile";
   onViewportChange?: (mode: "desktop" | "tablet" | "mobile") => void;
+  activeTab?: "playground" | "3d" | "diff";
+  onTabChange?: (tab: "playground" | "3d" | "diff") => void;
+  scene3DProps?: {
+    centerShape?: "torus" | "knot" | "cube" | "sphere" | "crystal";
+    lightingTheme?: "default" | "cyberpunk" | "monochrome" | "sunset";
+    hasExtraMesh?: boolean;
+  };
 }
 
 /**
@@ -55,6 +63,9 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
   presets = [],
   viewportMode: externalViewportMode,
   onViewportChange,
+  activeTab: externalActiveTab,
+  onTabChange,
+  scene3DProps,
 }) => {
   const agentStatus = useSculptStore(selectAgentStatus);
   const agentLogs = useSculptStore(selectAgentLogs);
@@ -65,9 +76,16 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
   const canRedoStore = useSculptStore(selectCanRedo);
 
   const [showLogs, setShowLogs] = useState(false);
-  const [activeTab, setActiveTab] = useState<"playground" | "3d" | "diff">(
-    "playground",
-  );
+  const [internalActiveTab, setInternalActiveTab] = useState<
+    "playground" | "3d" | "diff"
+  >("playground");
+  const activeTab = externalActiveTab || internalActiveTab;
+
+  const handleTabSelect = (tab: "playground" | "3d" | "diff") => {
+    setInternalActiveTab(tab);
+    onTabChange?.(tab);
+  };
+
   const [sidebarTab, setSidebarTab] = useState<"palette" | "tree">("palette");
   const [internalViewportMode, setInternalViewportMode] = useState<
     "desktop" | "tablet" | "mobile"
@@ -216,7 +234,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
               role="tab"
               aria-selected={activeTab === "playground"}
               className={`${styles.segmentButton} ${activeTab === "playground" ? styles.activeSegment : ""}`}
-              onClick={() => setActiveTab("playground")}
+              onClick={() => handleTabSelect("playground")}
             >
               <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
                 <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4V5h12v10z" />
@@ -227,7 +245,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
               role="tab"
               aria-selected={activeTab === "diff"}
               className={`${styles.segmentButton} ${activeTab === "diff" ? styles.activeSegment : ""}`}
-              onClick={() => setActiveTab("diff")}
+              onClick={() => handleTabSelect("diff")}
             >
               <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
                 <path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -238,7 +256,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
               role="tab"
               aria-selected={activeTab === "3d"}
               className={`${styles.segmentButton} ${activeTab === "3d" ? styles.activeSegment : ""}`}
-              onClick={() => setActiveTab("3d")}
+              onClick={() => handleTabSelect("3d")}
             >
               <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
                 <path d="M10 2L2 6l8 4 8-4-8-4zM2 9l8 4 8-4M2 13l8 4 8-4" />
@@ -345,22 +363,90 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
               />
             ) : (
               <div className={styles.treeView}>
-                <div className={styles.treeSectionTitle}>Component Hierarchy</div>
-                <div className={styles.treeItem} onClick={() => onSculpt("Target hero card wrapper")}>
-                  <span className={styles.treeTag}>&lt;HeroCard&gt;</span>
+                <div className={styles.treeSectionTitle}>
+                  {activeTab === "3d"
+                    ? "3D Spatial Hierarchy"
+                    : "Component Hierarchy"}
                 </div>
-                <div className={`${styles.treeItem} ${styles.indent1}`} onClick={() => onSculpt("Target metrics grid")}>
-                  <span className={styles.treeTag}>&lt;MetricsGrid&gt;</span>
-                </div>
-                <div className={`${styles.treeItem} ${styles.indent2}`} onClick={() => onSculpt("Target revenue metric")}>
-                  <span className={styles.treeTag}>&lt;RevenueMetric&gt;</span>
-                </div>
-                <div className={`${styles.treeItem} ${styles.indent1}`} onClick={() => onSculpt("Target action button bar")}>
-                  <span className={styles.treeTag}>&lt;ActionBar&gt;</span>
-                </div>
-                <div className={`${styles.treeItem} ${styles.indent2}`} onClick={() => onSculpt("Target primary action button")}>
-                  <span className={styles.treeTag}>&lt;PrimaryButton&gt;</span>
-                </div>
+                {activeTab === "3d" ? (
+                  <>
+                    <div
+                      className={styles.treeItem}
+                      onClick={() => onSculpt("Target 3D Scene root")}
+                    >
+                      <span className={styles.treeTag}>&lt;Scene3D&gt;</span>
+                    </div>
+                    <div
+                      className={`${styles.treeItem} ${styles.indent1}`}
+                      onClick={() => onSculpt("Target central 3D geometry")}
+                    >
+                      <span className={styles.treeTag}>
+                        &lt;FloatingCoreObject&gt;
+                      </span>
+                    </div>
+                    <div
+                      className={`${styles.treeItem} ${styles.indent1}`}
+                      onClick={() => onSculpt("Target satellite data nodes")}
+                    >
+                      <span className={styles.treeTag}>
+                        &lt;SatelliteNodes&gt;
+                      </span>
+                    </div>
+                    <div
+                      className={`${styles.treeItem} ${styles.indent1}`}
+                      onClick={() => onSculpt("Target spatial particle field")}
+                    >
+                      <span className={styles.treeTag}>
+                        &lt;SpatialParticleField&gt;
+                      </span>
+                    </div>
+                    <div
+                      className={`${styles.treeItem} ${styles.indent1}`}
+                      onClick={() => onSculpt("Target 3D lighting system")}
+                    >
+                      <span className={styles.treeTag}>
+                        &lt;CyberpunkLighting&gt;
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      className={styles.treeItem}
+                      onClick={() => onSculpt("Target hero card wrapper")}
+                    >
+                      <span className={styles.treeTag}>&lt;HeroCard&gt;</span>
+                    </div>
+                    <div
+                      className={`${styles.treeItem} ${styles.indent1}`}
+                      onClick={() => onSculpt("Target metrics grid")}
+                    >
+                      <span className={styles.treeTag}>&lt;MetricsGrid&gt;</span>
+                    </div>
+                    <div
+                      className={`${styles.treeItem} ${styles.indent2}`}
+                      onClick={() => onSculpt("Target revenue metric")}
+                    >
+                      <span className={styles.treeTag}>
+                        &lt;RevenueMetric&gt;
+                      </span>
+                    </div>
+                    <div
+                      className={`${styles.treeItem} ${styles.indent1}`}
+                      onClick={() => onSculpt("Target action button bar")}
+                    >
+                      <span className={styles.treeTag}>&lt;ActionBar&gt;</span>
+                    </div>
+                    <div
+                      className={`${styles.treeItem} ${styles.indent2}`}
+                      onClick={() => onSculpt("Target primary action button")}
+                    >
+                      <span className={styles.treeTag}>
+                        &lt;PrimaryButton&gt;
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -403,7 +489,7 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
             </div>
           </div>
 
-          <div className={styles.canvasStage}>
+          <div className={`${styles.canvasStage} ${activeTab !== "playground" ? styles.canvasStageFull : ""}`}>
             {activeTab === "playground" && (
               <div
                 className={`${styles.deviceFrame} ${styles[currentViewport]}`}
@@ -430,10 +516,14 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
             {activeTab === "3d" && (
               <div className={styles.stagePanel}>
                 <Scene3DTarget
+                  targetCoordinate={activeCoordinate}
+                  centerShape={scene3DProps?.centerShape || "knot"}
+                  lightingTheme={scene3DProps?.lightingTheme || "cyberpunk"}
+                  hasExtraMesh={scene3DProps?.hasExtraMesh ?? true}
                   onTargetSelect={(pos) => {
                     useSculptStore.getState().setTargetCoordinate({
-                      x: Math.max(0, Math.min(1, (pos[0] + 5) / 10)),
-                      y: Math.max(0, Math.min(1, (pos[1] + 5) / 10)),
+                      x: Math.max(0, Math.min(1, (pos[0] + 12) / 24)),
+                      y: Math.max(0, Math.min(1, (pos[2] + 12) / 24)),
                       viewportWidth: 1280,
                       viewportHeight: 800,
                       timestamp: Date.now(),
@@ -554,22 +644,15 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                     {designTokens.colors.primary}
                   </span>
                 </div>
-                <label className={styles.tokenSwatchLabel} title="Click to customize Primary Accent">
-                  <div
-                    className={styles.tokenSwatch}
-                    style={{ background: designTokens.colors.primary }}
-                  />
-                  <input
-                    type="color"
-                    className={styles.colorPickerInput}
-                    value={designTokens.colors.primary}
-                    onChange={(e) =>
-                      useSculptStore.getState().setDesignTokens({
-                        colors: { ...designTokens.colors, primary: e.target.value },
-                      })
-                    }
-                  />
-                </label>
+                <TokenColorPicker
+                  label="Primary Accent"
+                  value={designTokens.colors.primary}
+                  onChange={(color) =>
+                    useSculptStore.getState().setDesignTokens({
+                      colors: { ...designTokens.colors, primary: color },
+                    })
+                  }
+                />
               </div>
               <div className={styles.tokenRow}>
                 <div className={styles.tokenInfo}>
@@ -578,22 +661,15 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                     {designTokens.colors.surface}
                   </span>
                 </div>
-                <label className={styles.tokenSwatchLabel} title="Click to customize Surface Background">
-                  <div
-                    className={styles.tokenSwatch}
-                    style={{ background: designTokens.colors.surface }}
-                  />
-                  <input
-                    type="color"
-                    className={styles.colorPickerInput}
-                    value={designTokens.colors.surface}
-                    onChange={(e) =>
-                      useSculptStore.getState().setDesignTokens({
-                        colors: { ...designTokens.colors, surface: e.target.value },
-                      })
-                    }
-                  />
-                </label>
+                <TokenColorPicker
+                  label="Surface Background"
+                  value={designTokens.colors.surface}
+                  onChange={(color) =>
+                    useSculptStore.getState().setDesignTokens({
+                      colors: { ...designTokens.colors, surface: color },
+                    })
+                  }
+                />
               </div>
               <div className={styles.tokenRow}>
                 <div className={styles.tokenInfo}>
@@ -602,22 +678,15 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                     {designTokens.colors.text}
                   </span>
                 </div>
-                <label className={styles.tokenSwatchLabel} title="Click to customize Text Primary">
-                  <div
-                    className={styles.tokenSwatch}
-                    style={{ background: designTokens.colors.text }}
-                  />
-                  <input
-                    type="color"
-                    className={styles.colorPickerInput}
-                    value={designTokens.colors.text}
-                    onChange={(e) =>
-                      useSculptStore.getState().setDesignTokens({
-                        colors: { ...designTokens.colors, text: e.target.value },
-                      })
-                    }
-                  />
-                </label>
+                <TokenColorPicker
+                  label="Text Primary"
+                  value={designTokens.colors.text}
+                  onChange={(color) =>
+                    useSculptStore.getState().setDesignTokens({
+                      colors: { ...designTokens.colors, text: color },
+                    })
+                  }
+                />
               </div>
               <div className={styles.tokenRow}>
                 <div className={styles.tokenInfo}>
@@ -626,22 +695,15 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
                     {designTokens.colors.border}
                   </span>
                 </div>
-                <label className={styles.tokenSwatchLabel} title="Click to customize Border Color">
-                  <div
-                    className={styles.tokenSwatch}
-                    style={{ background: designTokens.colors.border }}
-                  />
-                  <input
-                    type="color"
-                    className={styles.colorPickerInput}
-                    value={designTokens.colors.border}
-                    onChange={(e) =>
-                      useSculptStore.getState().setDesignTokens({
-                        colors: { ...designTokens.colors, border: e.target.value },
-                      })
-                    }
-                  />
-                </label>
+                <TokenColorPicker
+                  label="Border Color"
+                  value={designTokens.colors.border}
+                  onChange={(color) =>
+                    useSculptStore.getState().setDesignTokens({
+                      colors: { ...designTokens.colors, border: color },
+                    })
+                  }
+                />
               </div>
             </div>
           </div>

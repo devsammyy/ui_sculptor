@@ -7,6 +7,8 @@ export interface AnalyticsCardProps {
   count?: number;
   delta?: string;
   isPositive?: boolean;
+  starcastToday?: number;
+  onAddStarcast?: () => void;
 }
 
 export const AnalyticsCard: React.FC<AnalyticsCardProps> = ({
@@ -14,7 +16,17 @@ export const AnalyticsCard: React.FC<AnalyticsCardProps> = ({
   count = 12480,
   delta = "+8.2%",
   isPositive = true,
+  starcastToday = 12,
+  onAddStarcast,
 }) => {
+  const [starcastsToday, setStarcastsToday] =
+    React.useState<number>(starcastToday);
+
+  const handleAddStarcast = () => {
+    setStarcastsToday((prev) => prev + 1);
+    onAddStarcast?.();
+  };
+
   return (
     <div
       style={{
@@ -45,6 +57,51 @@ export const AnalyticsCard: React.FC<AnalyticsCardProps> = ({
         >
           {delta}
         </span>
+      </div>
+      <div
+        style={{
+          marginTop: "1rem",
+          paddingTop: "1rem",
+          borderTop: "1px solid #E5E7EB",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "1rem",
+          fontFamily: "Inter, system-ui, sans-serif",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: "1rem",
+              color: "#6B7280",
+              marginBottom: "0.25rem",
+            }}
+          >
+            ⭐ Starcast Today
+          </div>
+          <div style={{ fontSize: "1.125rem", fontWeight: "bold" }}>
+            {starcastsToday.toLocaleString()} new
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleAddStarcast}
+          aria-label="Add more Starcast today"
+          style={{
+            background: "#0066CC",
+            color: "#FFFFFF",
+            border: "1px solid #E5E7EB",
+            borderRadius: "9999px",
+            padding: "0.5rem 1rem",
+            fontFamily: "Inter, system-ui, sans-serif",
+            fontSize: "1rem",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          + Add More Starcast
+        </button>
       </div>
     </div>
   );

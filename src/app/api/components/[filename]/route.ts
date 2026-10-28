@@ -15,13 +15,18 @@ export async function GET(
     }
 
     const fs = new DiskFileSystemAdapter(process.cwd());
-    const filePath = `src/components/${filename}`;
-    const code = await fs.readFile(filePath);
+    let targetPath = `src/components/${filename}`;
+    if (!(await fs.exists(targetPath))) {
+      if (await fs.exists(`src/components/organisms/${filename}`)) {
+        targetPath = `src/components/organisms/${filename}`;
+      }
+    }
+    const code = await fs.readFile(targetPath);
 
     return NextResponse.json({
       success: true,
       filename,
-      filePath,
+      filePath: targetPath,
       code,
     });
   } catch (err) {

@@ -288,11 +288,17 @@ export class HostedMetaStrategy extends BaseModelStrategy {
   }
 
   private extractCodeBlock(content: string): string {
-    const codeBlockMatch = content.match(
-      /```(?:typescript|tsx|javascript|jsx)?\n([\s\S]*?)\n```/,
+    const closedMatch = content.match(
+      /```(?:typescript|tsx|javascript|jsx)?\r?\n([\s\S]*?)\r?\n```/,
     );
-    if (codeBlockMatch && codeBlockMatch[1]) {
-      return codeBlockMatch[1].trim();
+    if (closedMatch && closedMatch[1]) {
+      return closedMatch[1].trim();
+    }
+    const unclosedMatch = content.match(
+      /```(?:typescript|tsx|javascript|jsx)?\r?\n([\s\S]*)$/,
+    );
+    if (unclosedMatch && unclosedMatch[1]) {
+      return unclosedMatch[1].replace(/```+$/, "").trim();
     }
     return content.trim();
   }

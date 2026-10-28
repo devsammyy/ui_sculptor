@@ -2,6 +2,7 @@ import { DiskFileSystemAdapter } from "@/infrastructure/adapters/file-system-ada
 import { NextRequest, NextResponse } from "next/server";
 import { HostedMetaStrategy } from "@/core/domain/strategies/model-strategy";
 import { SynthesisContext } from "@/core/domain/models/viewport-target";
+import { ValidationPipeline } from "@/core/services/ValidationPipeline";
 
 /**
  * POST /api/sculpt
@@ -115,6 +116,29 @@ export async function POST(request: NextRequest) {
             result.diagnostics[0]?.message || "Synthesis failed — no patched code returned from Meta API",
         },
         { status: 500 },
+      );
+    }
+
+    // Step 2: Validate patched code using AST pipeline BEFORE persisting to disk
+    const validationPipeline = new ValidationPipeline();
+    const validationResult = await validationPipeline.validate(
+      result.patchedCode,
+      filePath,
+      synthesisContext.projectFiles,
+    );
+
+    if (!validationResult.valid) {
+      const syntaxError = validationResult.diagnostics.find(
+        (d) => d.severity === "error",
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            syntaxError?.message ||
+            "Synthesis produced incomplete or invalid syntax — file modification aborted to preserve build stability",
+        },
+        { status: 422 },
       );
     }
 

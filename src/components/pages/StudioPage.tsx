@@ -117,6 +117,14 @@ function saveCanvasState(state: PersistedCanvasState): void {
  * StudioPage - Main Page component
  * High-craft visual engineering studio with live interactive canvas
  */
+const SPATIAL_PRESETS = [
+  { label: "Add 3D Knot", intent: "Add a rotating golden metallic torus knot mesh with specular reflections" },
+  { label: "Cyberpunk Lights", intent: "Set vibrant point lights in neon cyan and magenta with high intensity" },
+  { label: "Satellite Nodes", intent: "Add 4 orbiting glowing data cubes around the central geometry" },
+  { label: "Particle Stars", intent: "Add an ambient field of 200 floating particle stars with depth" },
+  { label: "Crystal Core", intent: "Change central geometry to a faceted crystal octahedron with glass material" },
+];
+
 export const StudioPage: React.FC<StudioPageProps> = ({
   initialPresets = [
     { label: "Add Button", intent: "Add a secondary audit log button with icon" },
@@ -133,6 +141,13 @@ export const StudioPage: React.FC<StudioPageProps> = ({
   const designTokens = useSculptStore(selectDesignTokens);
   const canUndo = useSculptStore(selectCanUndo);
   const canRedo = useSculptStore(selectCanRedo);
+
+  // Tab and 3D Spatial states
+  const [activeTab, setActiveTab] = useState<"playground" | "3d" | "diff">("playground");
+  const [activeFile2D, setActiveFile2D] = useState<string>("DashboardHero.tsx");
+  const [scene3DShape, setScene3DShape] = useState<"knot" | "torus" | "cube" | "sphere" | "crystal">("knot");
+  const [scene3DLighting, setScene3DLighting] = useState<"default" | "cyberpunk" | "monochrome" | "sunset">("cyberpunk");
+  const [scene3DHasSatellites, setScene3DHasSatellites] = useState(true);
 
   // Rehydrate canvas state from localStorage on first render
   const [_persisted] = useState<PersistedCanvasState>(loadCanvasState);
@@ -201,6 +216,9 @@ export const StudioPage: React.FC<StudioPageProps> = ({
 
   // Handler to switch files dynamically
   const handleFileSelect = useCallback(async (newFile: string) => {
+    if (newFile !== "Scene3DTarget.tsx") {
+      setActiveFile2D(newFile);
+    }
     useSculptStore.getState().setActiveFile(newFile);
     try {
       const res = await fetch(`/api/components/${newFile}`);
@@ -214,6 +232,38 @@ export const StudioPage: React.FC<StudioPageProps> = ({
       console.error("Failed to load file content:", err);
     }
   }, [applyCodeToComponentState]);
+
+  // Handler when user switches between Canvas, 3D Spatial, and Code Diff tabs
+  const handleTabChange = useCallback(
+    (tab: "playground" | "3d" | "diff") => {
+      setActiveTab(tab);
+      if (tab === "3d") {
+        useSculptStore.getState().setActiveFile("Scene3DTarget.tsx");
+        fetch("/api/components/Scene3DTarget.tsx")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.code) {
+              useSculptStore.getState().setOldCode(data.code);
+              useSculptStore.getState().setNewCode(data.code);
+            }
+          })
+          .catch(() => {});
+      } else if (tab === "playground") {
+        useSculptStore.getState().setActiveFile(activeFile2D);
+        fetch(`/api/components/${activeFile2D}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.code) {
+              useSculptStore.getState().setOldCode(data.code);
+              useSculptStore.getState().setNewCode(data.code);
+              applyCodeToComponentState(data.code);
+            }
+          })
+          .catch(() => {});
+      }
+    },
+    [activeFile2D, applyCodeToComponentState],
+  );
 
   const handleElementSelect = (name: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -253,13 +303,18 @@ export const StudioPage: React.FC<StudioPageProps> = ({
       });
 
       try {
+        const targetFilePath =
+          activeFile === "Scene3DTarget.tsx" || activeTab === "3d"
+            ? "src/components/organisms/Scene3DTarget.tsx"
+            : `src/components/${activeFile}`;
+
         const response = await fetch("/api/sculpt", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             intent,
             target: store.activeCoordinate || { x: 0.5, y: 0.5 },
-            filePath: `src/components/${activeFile}`,
+            filePath: targetFilePath,
             context: { designTokens },
           }),
         });
@@ -272,7 +327,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({
           const cmd = new MutateComponentCommand(
             `cmd-${Date.now()}`,
             Date.now(),
-            `src/components/${activeFile}`,
+            targetFilePath,
             prevCode || oldCode,
             nextCode,
             {
@@ -291,7 +346,35 @@ export const StudioPage: React.FC<StudioPageProps> = ({
 
           store.setOldCode(prevCode || oldCode);
           store.setNewCode(nextCode);
-          applyCodeToComponentState(nextCode);
+
+          if (targetFilePath.includes("Scene3DTarget.tsx")) {
+            if (nextCode.includes("crystal") || nextCode.includes("octahedron")) {
+              setScene3DShape("crystal");
+            } else if (nextCode.includes("torus") && !nextCode.includes("Knot")) {
+              setScene3DShape("torus");
+            } else if (nextCode.includes("cube")) {
+              setScene3DShape("cube");
+            } else if (nextCode.includes("sphere")) {
+              setScene3DShape("sphere");
+            } else if (nextCode.includes("knot")) {
+              setScene3DShape("knot");
+            }
+
+            if (nextCode.includes("cyberpunk")) setScene3DLighting("cyberpunk");
+            else if (nextCode.includes("monochrome")) setScene3DLighting("monochrome");
+            else if (nextCode.includes("sunset")) setScene3DLighting("sunset");
+
+            if (
+              nextCode.includes("hasExtraMesh = false") ||
+              nextCode.includes("hasExtraMesh={false}")
+            ) {
+              setScene3DHasSatellites(false);
+            } else if (nextCode.includes("hasExtraMesh")) {
+              setScene3DHasSatellites(true);
+            }
+          } else {
+            applyCodeToComponentState(nextCode);
+          }
 
           store.appendLog({
             step: `AST Mutation Verified (${metadata?.strategyUsed || "Autonomous Engine"})`,
@@ -365,12 +448,19 @@ export const StudioPage: React.FC<StudioPageProps> = ({
         onRedo={handleRedo}
         canUndo={Boolean(canUndo)}
         canRedo={Boolean(canRedo)}
-        activeFile={activeFile}
+        activeFile={activeTab === "3d" ? "Scene3DTarget.tsx" : activeFile}
         availableFiles={availableFiles}
         onFileSelect={handleFileSelect}
         oldCode={oldCode}
         newCode={newCode}
-        presets={initialPresets}
+        presets={activeTab === "3d" ? SPATIAL_PRESETS : initialPresets}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        scene3DProps={{
+          centerShape: scene3DShape,
+          lightingTheme: scene3DLighting,
+          hasExtraMesh: scene3DHasSatellites,
+        }}
       >
         {/* Render the currently selected component file */}
         {activeFile === "ProductCard.tsx" ? (
