@@ -1,109 +1,132 @@
-"use client";
-
-import React from "react";
-
 export interface ProductCardProps {
-  title?: string;
-  price?: number;
-  category?: string;
+  name?: string;
   description?: string;
-  inStock?: boolean;
+  price?: number;
+  imageUrl?: string;
+  imageAlt?: string;
+  rating?: number;
+  onAddToCart?: () => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({
-  title = "Wireless Noise-Canceling Headphones",
-  price = 249.99,
-  category = "Audio Equipment",
-  description = "Premium acoustic architecture with dynamic drivers, active spatial audio, and 30-hour battery life.",
-  inStock = true,
-}) => {
+export const ProductCard = ({
+  name = "Wireless Headphones",
+  description = "High-quality sound with comfortable, all-day wear and intuitive controls.",
+  price = 49.99,
+  imageUrl,
+  imageAlt,
+  rating = 4.8,
+  onAddToCart,
+}: ProductCardProps) => {
   return (
-    <div
+    <article
       style={{
-        borderRadius: "16px",
-        padding: "24px",
-        background: "rgba(18, 21, 30, 0.94)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
-        color: "#f3f4f6",
-        maxWidth: "420px",
-        boxShadow: "0 20px 40px rgba(0, 0, 0, 0.5)",
+        backgroundColor: "#FF0000",
+        border: "1px solid #E5E7EB",
+        borderRadius: "1rem",
+        boxSizing: "border-box",
+        color: "#111827",
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "Inter, system-ui, sans-serif",
+        overflow: "hidden",
+        width: "100%",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "16px",
-        }}
-      >
-        <span
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={imageAlt ?? name}
           style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            color: "#38bdf8",
+            aspectRatio: "4 / 3",
+            backgroundColor: "#F9FAFB",
+            display: "block",
+            objectFit: "cover",
+            width: "100%",
+          }}
+        />
+      ) : (
+        <div
+          role="img"
+          aria-label={imageAlt ?? name}
+          style={{
+            alignItems: "center",
+            aspectRatio: "4 / 3",
+            backgroundColor: "#FF0000",
+            color: "#6B7280",
+            display: "flex",
+            fontSize: "1rem",
+            justifyContent: "center",
+            width: "100%",
           }}
         >
-          {category}
-        </span>
-        <span
-          style={{
-            padding: "4px 10px",
-            borderRadius: "9999px",
-            fontSize: "11px",
-            fontWeight: 600,
-            background: inStock ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
-            color: inStock ? "#34d399" : "#f87171",
-            border: inStock ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)",
-          }}
-        >
-          {inStock ? "In Stock" : "Out of Stock"}
-        </span>
-      </div>
-
-      <h3 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 8px 0" }}>
-        {title}
-      </h3>
-
-      <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.5, margin: "0 0 20px 0" }}>
-        {description}
-      </p>
+          Product Image
+        </div>
+      )}
 
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          paddingTop: "16px",
-          borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+          flexDirection: "column",
+          gap: "0.5rem",
+          padding: "1.5rem",
         }}
       >
-        <div>
-          <span style={{ fontSize: "11px", color: "#64748b", display: "block" }}>Price</span>
-          <span style={{ fontSize: "22px", fontWeight: 700, color: "#ffffff" }}>
-            ${price.toFixed(2)}
-          </span>
+        <h3
+          style={{
+            fontSize: "1.125rem",
+            margin: 0,
+          }}
+        >
+          {name}
+        </h3>
+
+        <p
+          style={{
+            color: "#6B7280",
+            fontSize: "1rem",
+            margin: 0,
+          }}
+        >
+          {description}
+        </p>
+
+        <div
+          aria-label={`Rated ${rating} out of 5`}
+          style={{ color: "#6B7280", fontSize: "1rem" }}
+        >
+          ★ {rating.toFixed(1)}
         </div>
 
-        <button
+        <div
           style={{
-            padding: "10px 20px",
-            borderRadius: "8px",
-            background: "#3b82f6",
-            color: "#ffffff",
-            border: "none",
-            fontWeight: 600,
-            cursor: "pointer",
-            fontSize: "13px",
+            alignItems: "center",
+            display: "flex",
+            gap: "1rem",
+            justifyContent: "space-between",
+            marginTop: "1rem",
           }}
         >
-          Add to Cart
-        </button>
+          <span style={{ fontSize: "1.5rem" }}>${price.toFixed(2)}</span>
+
+          <button
+            type="button"
+            onClick={onAddToCart}
+            style={{
+              backgroundColor: "#0066CC",
+              border: "1px solid #0066CC",
+              borderRadius: "0.5rem",
+              color: "#FFFFFF",
+              cursor: "pointer",
+              fontFamily: "Inter, system-ui, sans-serif",
+              fontSize: "1rem",
+              padding: "0.5rem 1rem",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Add to Cart
+          </button>
+        </div>
       </div>
-    </div>
+    </article>
   );
 };
-
-export default ProductCard;

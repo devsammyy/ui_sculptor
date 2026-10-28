@@ -4,6 +4,7 @@ import styles from "./AudioWaveformIndicator.module.css";
 interface AudioWaveformIndicatorProps {
   level: number; // 0-1
   isRecording: boolean;
+  isTranscribing?: boolean;
   className?: string;
 }
 
@@ -14,6 +15,7 @@ interface AudioWaveformIndicatorProps {
 export const AudioWaveformIndicator: React.FC<AudioWaveformIndicatorProps> = ({
   level,
   isRecording,
+  isTranscribing = false,
   className = "",
 }) => {
   const barCount = 5;
@@ -21,7 +23,9 @@ export const AudioWaveformIndicator: React.FC<AudioWaveformIndicatorProps> = ({
     // Stagger the animation delay for each bar
     const delay = i * 80;
     // Use the level to determine height, with some randomness for visual interest
-    const baseHeight = Math.max(level * 100, isRecording ? 10 : 0);
+    const baseHeight = isTranscribing
+      ? 40 + Math.sin(Date.now() / 150 + i) * 30
+      : Math.max(level * 100, isRecording ? 10 : 0);
     const variation = isRecording ? Math.sin(Date.now() / 100 + i) * 15 : 0;
     const height = Math.min(Math.max(baseHeight + variation, 0), 100);
 
@@ -44,7 +48,9 @@ export const AudioWaveformIndicator: React.FC<AudioWaveformIndicatorProps> = ({
       className={`${styles.container} ${className}`}
       role="img"
       aria-label={
-        isRecording
+        isTranscribing
+          ? "Transcribing audio..."
+          : isRecording
           ? `Recording, audio level ${Math.round(level * 100)}%`
           : "Microphone inactive"
       }

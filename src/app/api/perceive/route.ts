@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureWavBuffer } from "@/infrastructure/adapters/audio-converter";
 
 /**
  * POST /api/perceive
@@ -89,17 +90,25 @@ export async function POST(request: NextRequest) {
       const museVoiceUrl =
         process.env["MUSE_VOICE_API_URL"] || "https://api.meta.ai/v1";
 
-      // Build multipart form for the transcription endpoint
-      const audioBuffer = Buffer.from(audioBase64, "base64");
+      // Convert audio to 16kHz mono WAV for Meta Muse Voice Transcribe
+      const rawAudioBuffer = Buffer.from(audioBase64, "base64");
+      const wavBuffer = await ensureWavBuffer(rawAudioBuffer);
+
+      // Build multipart form matching Meta Model API specification:
+      // Part 1: 'request' JSON with model, audioEncoding=WAV, mode=PUSH_TO_TALK
+      // Part 2: 'audio' binary WAV data
       const boundary = "----MetaVoiceBoundary" + Date.now().toString(16);
-      const ext = audioMimeType.includes("ogg") ? "ogg" : "webm";
+      const requestJsonPart = JSON.stringify({
+        model: "muse-voice-transcribe-1.0",
+        audioEncoding: "WAV",
+        mode: "PUSH_TO_TALK",
+      });
 
       const formParts = [
-        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.${ext}"\r\nContent-Type: ${audioMimeType}\r\n\r\n`,
-        audioBuffer,
-        `\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nmuse-voice-transcribe-1.0\r\n`,
-        `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nen\r\n`,
-        `--${boundary}--\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="request"\r\nContent-Type: application/json\r\n\r\n${requestJsonPart}\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="audio.wav"\r\nContent-Type: audio/wav\r\n\r\n`,
+        wavBuffer,
+        `\r\n--${boundary}--\r\n`,
       ];
 
       const bodyParts = formParts.map((p) =>
@@ -108,17 +117,18 @@ export async function POST(request: NextRequest) {
       const body = Buffer.concat(bodyParts);
 
       const voiceResponse = await fetch(
-        `${museVoiceUrl}/audio/transcriptions`,
+        `${museVoiceUrl}/asr/transcribe`,
         {
           method: "POST",
           headers: {
             "Content-Type": `multipart/form-data; boundary=${boundary}`,
+            Accept: "application/json",
             ...(metaApiKey
               ? { Authorization: `Bearer ${metaApiKey}` }
               : {}),
           },
           body,
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(20000),
         },
       );
 
@@ -128,7 +138,13 @@ export async function POST(request: NextRequest) {
       }
 
       const voiceData = await voiceResponse.json();
-      transcription = voiceData.text || "";
+      transcription =
+        voiceData.transcript ||
+        voiceData.text ||
+        (Array.isArray(voiceData.turns)
+          ? voiceData.turns.map((t: any) => t.text).join(" ").trim()
+          : "") ||
+        "";
     }
 
     return NextResponse.json({

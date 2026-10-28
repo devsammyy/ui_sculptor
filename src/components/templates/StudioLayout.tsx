@@ -481,7 +481,10 @@ export const StudioLayout: React.FC<StudioLayoutProps> = ({
 
               <div className={styles.dockControls}>
                 <PushToTalkTrigger
-                  onTranscription={onSculpt}
+                  onTranscription={(text) => {
+                    setPromptText(text);
+                    onSculpt(text);
+                  }}
                   onRecordingChange={() => {}}
                 />
                 <button

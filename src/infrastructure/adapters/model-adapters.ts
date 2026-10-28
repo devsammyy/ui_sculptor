@@ -3,6 +3,7 @@ import {
   SynthesisContext,
   SynthesisResult,
 } from "../../core/domain/strategies/model-strategy";
+import { ensureWavBuffer } from "./audio-converter";
 
 /**
  * OpenWeight Model Adapter - Communicates with locally running Muse Spark Open via vLLM/Ollama
@@ -434,41 +435,66 @@ export class MuseVoiceAdapter implements VoiceAdapter {
 
   constructor(
     apiKey: string = process.env.META_API_KEY!,
-    baseUrl: string = process.env.META_API_BASE || "https://api.meta.com/v1",
+    baseUrl: string = process.env.META_API_BASE || "https://api.meta.ai/v1",
   ) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
   }
 
-  async transcribe(audioBase64: string, mimeType: string): Promise<string> {
+  async transcribe(audioBase64: string, _mimeType: string): Promise<string> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const formData = new FormData();
-      const blob = new Blob([Buffer.from(audioBase64, "base64")], {
-        type: mimeType,
-      });
-      formData.append("file", blob, "audio.webm");
-      formData.append("model", "muse-voice-transcribe-1.0");
+      const rawAudioBuffer = Buffer.from(audioBase64, "base64");
+      const wavBuffer = await ensureWavBuffer(rawAudioBuffer);
 
-      const response = await fetch(`${this.baseUrl}/audio/transcriptions`, {
+      const boundary = "----MetaVoiceBoundary" + Date.now().toString(16);
+      const requestJsonPart = JSON.stringify({
+        model: "muse-voice-transcribe-1.0",
+        audioEncoding: "WAV",
+        mode: "PUSH_TO_TALK",
+      });
+
+      const formParts = [
+        `--${boundary}\r\nContent-Disposition: form-data; name="request"\r\nContent-Type: application/json\r\n\r\n${requestJsonPart}\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="audio.wav"\r\nContent-Type: audio/wav\r\n\r\n`,
+        wavBuffer,
+        `\r\n--${boundary}--\r\n`,
+      ];
+
+      const bodyParts = formParts.map((p) =>
+        typeof p === "string" ? Buffer.from(p, "utf-8") : p,
+      );
+      const body = Buffer.concat(bodyParts);
+
+      const response = await fetch(`${this.baseUrl}/asr/transcribe`, {
         method: "POST",
         headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          Accept: "application/json",
           Authorization: `Bearer ${this.apiKey}`,
         },
-        body: formData,
+        body,
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`Muse Voice API error: ${response.status}`);
+        const errorText = await response.text().catch(() => "");
+        throw new Error(`Muse Voice API error (${response.status}): ${errorText}`);
       }
 
       const data = await response.json();
-      return data.text || "";
+      return (
+        data.transcript ||
+        data.text ||
+        (Array.isArray(data.turns)
+          ? data.turns.map((t: any) => t.text).join(" ").trim()
+          : "") ||
+        ""
+      );
     } catch (error) {
       clearTimeout(timeoutId);
       throw error;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAudioCapture } from "../../hooks/useAudioCapture";
 import { AudioWaveformIndicator } from "../atoms/AudioWaveformIndicator";
 import styles from "./PushToTalkTrigger.module.css";
@@ -14,7 +14,7 @@ interface PushToTalkTriggerProps {
 
 /**
  * PushToTalkTrigger - Molecule component
- * Mic button + keyboard shortcut listener + waveform
+ * Mic button + keyboard shortcut listener + waveform + transcription state
  */
 export const PushToTalkTrigger: React.FC<PushToTalkTriggerProps> = ({
   onTranscription,
@@ -22,44 +22,67 @@ export const PushToTalkTrigger: React.FC<PushToTalkTriggerProps> = ({
   className = "",
   shortcutKey = "Space",
 }) => {
-  const { isRecording, audioLevel, startRecording, stopRecording, error } =
-    useAudioCapture(
-      useCallback(
-        async (audioBlob: Blob) => {
-          // Convert to base64 and send to API
-          const base64 = await blobToBase64(audioBlob);
-          try {
-            const response = await fetch("/api/perceive", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                audioBase64: base64,
-                audioMimeType: "audio/webm",
-              }),
-            });
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
 
-            if (response.ok) {
-              const data = await response.json();
-              if (data.intent) {
-                onTranscription(data.intent);
-              }
-            }
-          } catch (err) {
-            console.error("Transcription failed:", err);
+  const handleAudioReady = useCallback(
+    async (audioBlob: Blob) => {
+      setTranscriptionError(null);
+      try {
+        const base64 = await blobToBase64(audioBlob);
+        const response = await fetch("/api/perceive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            audioBase64: base64,
+            audioMimeType: audioBlob.type || "audio/wav",
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = (data.intent || data.transcription || "").trim();
+          if (text) {
+            onTranscription(text);
+          } else {
+            console.warn("[PushToTalkTrigger] No speech recognized in audio");
           }
-        },
-        [onTranscription],
-      ),
-    );
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          const errMsg = errData.details || errData.error || `HTTP ${response.status}`;
+          console.error("[PushToTalkTrigger] Transcription error:", errMsg);
+          setTranscriptionError(errMsg);
+          setTimeout(() => setTranscriptionError(null), 4000);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Transcription failed";
+        console.error("[PushToTalkTrigger] Failed to send audio:", err);
+        setTranscriptionError(msg);
+        setTimeout(() => setTranscriptionError(null), 4000);
+      }
+    },
+    [onTranscription],
+  );
+
+  const {
+    isRecording,
+    isTranscribing,
+    audioLevel,
+    startRecording,
+    stopRecording,
+    error: captureError,
+  } = useAudioCapture(handleAudioReady);
 
   const buttonRef = useRef<HTMLButtonElement>(null);
   const isSpacePressed = useRef(false);
+  const mouseDownTime = useRef(0);
+  const isMouseDown = useRef(false);
 
-  // Keyboard shortcut handling
+  const activeError = captureError || transcriptionError;
+
+  // Keyboard shortcut handling (Spacebar push-to-talk)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === shortcutKey && !isSpacePressed.current && !isRecording) {
-        // Prevent default only for space key when not in input
+      if (e.code === shortcutKey && !isSpacePressed.current && !isRecording && !isTranscribing) {
         const activeElement = document.activeElement;
         const isInput =
           activeElement?.tagName === "INPUT" ||
@@ -75,12 +98,13 @@ export const PushToTalkTrigger: React.FC<PushToTalkTriggerProps> = ({
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === shortcutKey && isSpacePressed.current && isRecording) {
+      if (e.code === shortcutKey && isSpacePressed.current) {
         e.preventDefault();
         isSpacePressed.current = false;
         stopRecording();
       }
     };
+
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
 
@@ -88,27 +112,44 @@ export const PushToTalkTrigger: React.FC<PushToTalkTriggerProps> = ({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [shortcutKey, isRecording, startRecording, stopRecording]);
+  }, [shortcutKey, isRecording, isTranscribing, startRecording, stopRecording]);
 
   // Notify parent of recording state changes
   useEffect(() => {
     onRecordingChange?.(isRecording);
   }, [isRecording, onRecordingChange]);
 
+  // Seamless click-to-toggle AND hold-to-talk support
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      if (e.button !== 0) return; // Only primary mouse button
       e.preventDefault();
-      startRecording();
+      isMouseDown.current = true;
+      mouseDownTime.current = Date.now();
+
+      if (!isRecording && !isTranscribing) {
+        startRecording();
+      }
     },
-    [startRecording],
+    [isRecording, isTranscribing, startRecording],
   );
 
   const handleMouseUp = useCallback(() => {
-    stopRecording();
-  }, [stopRecording]);
+    if (!isMouseDown.current) return;
+    isMouseDown.current = false;
+    const duration = Date.now() - mouseDownTime.current;
 
-  const handleMouseLeave = useCallback(() => {
-    if (isRecording) {
+    // If held for >= 350ms, this was hold-to-talk -> release stops recording.
+    // If clicked briefly (< 350ms), keep recording until clicked again (toggle mode).
+    if (duration >= 350 && isRecording) {
+      stopRecording();
+    }
+  }, [isRecording, stopRecording]);
+
+  const handleClick = useCallback(() => {
+    const duration = Date.now() - mouseDownTime.current;
+    // If it was a quick click and already recording, stop it!
+    if (duration < 350 && isRecording) {
       stopRecording();
     }
   }, [isRecording, stopRecording]);
@@ -116,42 +157,63 @@ export const PushToTalkTrigger: React.FC<PushToTalkTriggerProps> = ({
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
       e.preventDefault();
-      startRecording();
+      mouseDownTime.current = Date.now();
+      if (!isRecording && !isTranscribing) {
+        startRecording();
+      }
     },
-    [startRecording],
+    [isRecording, isTranscribing, startRecording],
   );
 
   const handleTouchEnd = useCallback(() => {
-    stopRecording();
-  }, [stopRecording]);
+    const duration = Date.now() - mouseDownTime.current;
+    if (duration >= 350 && isRecording) {
+      stopRecording();
+    }
+  }, [isRecording, stopRecording]);
 
   return (
     <button
       ref={buttonRef}
-      className={`${styles.container} ${isRecording ? styles.recording : ""} ${className}`}
+      type="button"
+      className={`${styles.container} ${isRecording ? styles.recording : ""} ${
+        isTranscribing ? styles.transcribing : ""
+      } ${className}`}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
+      onClick={handleClick}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       aria-label={
-        isRecording
-          ? "Release to stop recording"
-          : `Hold ${shortcutKey} or click to record`
+        isTranscribing
+          ? "Transcribing voice with Meta Muse..."
+          : isRecording
+          ? "Listening... Click or release to transcribe"
+          : `Click or hold ${shortcutKey} to speak`
       }
       aria-pressed={isRecording}
-      disabled={error !== null}
+      disabled={isTranscribing}
       title={
-        error ? `Error: ${error}` : `Hold ${shortcutKey} or click to speak`
+        activeError
+          ? `Error: ${activeError}`
+          : isTranscribing
+          ? "Transcribing voice with Meta Muse..."
+          : isRecording
+          ? "Listening... Click or release Space to finish"
+          : `Click or hold ${shortcutKey} to speak`
       }
     >
-      <AudioWaveformIndicator level={audioLevel} isRecording={isRecording} />
+      <AudioWaveformIndicator
+        level={audioLevel}
+        isRecording={isRecording}
+        isTranscribing={isTranscribing}
+      />
       <span className={styles.shortcutHint}>
-        {shortcutKey === "Space" ? "␣" : shortcutKey}
+        {isTranscribing ? "..." : shortcutKey === "Space" ? "␣" : shortcutKey}
       </span>
-      {error && (
+      {activeError && (
         <span className={styles.error} role="alert">
-          {error}
+          {activeError}
         </span>
       )}
     </button>
